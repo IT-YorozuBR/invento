@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Controllers;
@@ -88,42 +89,99 @@ class ContagemController
 
     private function processRegistro(int $inventarioId): void
     {
-        $deposito   = Security::sanitize($_POST['deposito']   ?? '');
-        $partnumber = Security::sanitize($_POST['partnumber'] ?? '');
 
-        // Suporte a "outro" (novo depósito/partnumber)
-        if ($deposito === 'outro' && !empty($_POST['novo_deposito'])) {
-            $deposito = Security::sanitize($_POST['novo_deposito']);
-            $this->deposito->save($deposito, Security::sanitize($_POST['nova_localizacao'] ?? ''));
-        }
-
-        if ($partnumber === 'outro' && !empty($_POST['novo_partnumber'])) {
-            $partnumber = Security::sanitize($_POST['novo_partnumber']);
-            $this->partnumber->save(
-                $partnumber,
-                Security::sanitize($_POST['nova_descricao'] ?? ''),
-                Security::sanitize($_POST['nova_unidade']   ?? 'UN')
-            );
-        }
-
+        $deposito   = strtoupper(trim(Security::sanitize($_POST['deposito']   ?? '')));
+        $partnumber = strtoupper(trim(Security::sanitize($_POST['partnumber'] ?? '')));
         $quantidade = (float) ($_POST['quantidade'] ?? 0);
+
+
+
+        $existing = $this->contagem->findOpenByPartnumber($inventarioId, $partnumber, $deposito);
+        if ($existing) {
+            // segurança: converter campos relevantes
+            $numContagens = (int) ($existing['numero_contagens_realizadas'] ?? 1);
+            $podeNova     = (int) ($existing['pode_nova_contagem'] ?? 0);
+
+            // Se a contagem ainda permite nova contagem e não alcançou o máximo (3)
+            if ($podeNova === 1 && $numContagens < 3) {
+                $result = $this->contagem->registrarNovaContagem(
+                    (int) $existing['id'],
+                    $quantidade,
+                    Security::currentUserId()
+                );
+                $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
+                return;
+            }
+            // se não pode nova contagem, continua o fluxo normal (cria nova primária)
+        }
 
         if ($quantidade <= 0) {
             $_SESSION['flash_error'] = 'Quantidade deve ser maior que zero.';
             return;
         }
 
-        // Registrar/atualizar no modelo (model fará touch em deposito e partnumber)
+        // ------------------------------------------------------------
+        // 3. Verificar se há uma nova contagem ativa na sessão
+        // ------------------------------------------------------------
+        $sessionKey = 'nova_contagem_' . md5($inventarioId . '|' . $partnumber . '|' . $deposito);
+
+        if (isset($_SESSION[$sessionKey])) {
+            // É uma SEGUNDA (ou TERCEIRA) contagem
+            $contagemId = (int) $_SESSION[$sessionKey];
+
+            $result = $this->contagem->registrarNovaContagem(
+                $contagemId,
+                $quantidade,
+                Security::currentUserId()
+            );
+
+            unset($_SESSION[$sessionKey]); // Remove a flag (já utilizada)
+
+            $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
+            return;
+        }
+
+        // ------------------------------------------------------------
+        // 4. FLUXO NORMAL: PRIMEIRA CONTAGEM (com suporte a "outro")
+        // ------------------------------------------------------------
+
+        // Suporte a novo depósito
+        if ($deposito === 'OUTRO' && !empty($_POST['nova_localizacao'])) {
+            $novoDeposito = strtoupper(trim(Security::sanitize($_POST['nova_localizacao'])));
+            $this->deposito->save($novoDeposito, Security::sanitize($_POST['nova_localizacao'] ?? ''));
+            $deposito = $novoDeposito; // substitui para uso na contagem
+        }
+
+        // Suporte a novo partnumber
+        if ($partnumber === 'OUTRO' && !empty($_POST['nova_descricao'])) {
+            $novoPartnumber = strtoupper(trim(Security::sanitize($_POST['nova_descricao'])));
+            $this->partnumber->save(
+                $novoPartnumber,
+                Security::sanitize($_POST['nova_descricao'] ?? ''),
+                Security::sanitize($_POST['nova_unidade'] ?? 'UN')
+            );
+            $partnumber = $novoPartnumber; // substitui para uso na contagem
+        }
+
+        // ------------------------------------------------------------
+        // 5. Touch nos modelos (atualiza timestamp)
+        // ------------------------------------------------------------
         $this->deposito->touch($deposito);
         $this->partnumber->touch($partnumber, Security::sanitize($_POST['descricao'] ?? ''));
 
-        $extra  = [
+        // ------------------------------------------------------------
+        // 6. Dados extras para a contagem
+        // ------------------------------------------------------------
+        $extra = [
             'descricao' => Security::sanitize($_POST['descricao'] ?? ''),
             'unidade'   => Security::sanitize($_POST['unidade']   ?? 'UN'),
             'lote'      => Security::sanitize($_POST['lote']      ?? '') ?: null,
             'validade'  => $_POST['validade'] ?? null,
         ];
 
+        // ------------------------------------------------------------
+        // 7. Registrar a primeira contagem
+        // ------------------------------------------------------------
         $result = $this->contagem->registrarPrimaria(
             $inventarioId,
             Security::currentUserId(),

@@ -15,9 +15,21 @@ use App\Core\Security;
 $pageTitle = 'Contagem — Sistema de Inventário';
 require SRC_PATH . '/Views/layout/header.php';
 
-$isAdmin = Security::isAdmin();
-$msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) $message, 'registrada') || str_contains((string) $message, 'atualizada')
+$isAdmin  = Security::isAdmin();
+$msgClass = str_contains((string) $message, 'sucesso')
+    || str_contains((string) $message, 'registrada')
+    || str_contains((string) $message, 'atualizada')
+    || str_contains((string) $message, 'finalizada')
+    || str_contains((string) $message, '✔')
     ? 'sucesso' : 'erro';
+
+// Verificar se há alguma nova contagem ativa na sessão (para indicar ao admin)
+$novasContagensAtivas = [];
+foreach ($_SESSION as $key => $val) {
+    if (str_starts_with($key, 'nova_contagem_')) {
+        $novasContagensAtivas[$key] = $val;
+    }
+}
 ?>
 
 <!-- Flash message -->
@@ -31,8 +43,8 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
         <i class="fas fa-clipboard-check"></i> Registrar Contagem
         <span style="font-size:13px;color:var(--gray);font-weight:400;margin-left:auto;display:flex;align-items:center;gap:10px;">
             Inventário: <strong><?= htmlspecialchars($inventarioAtivo['codigo']) ?></strong>
-            <button type="button" onclick="iniciarScannerQR()" class="btn btn-sm btn-secondary" 
-                    style="margin-left:10px;" title="Ler QR Code com a câmera">
+            <button type="button" onclick="iniciarScannerQR()" class="btn btn-sm btn-secondary"
+                style="margin-left:10px;" title="Ler QR Code com a câmera">
                 <i class="fas fa-qrcode"></i> Scan QR
             </button>
         </span>
@@ -54,18 +66,12 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
                         required
                         placeholder="Digite ou selecione o depósito"
                         autocomplete="off">
-
-                    <div id="depositoDropdown"
-                        class="autocomplete-dropdown"
-                        style="display:none;"></div>
+                    <div id="depositoDropdown" class="autocomplete-dropdown" style="display:none;"></div>
                 </div>
-
                 <div id="novoDepositoDiv" style="display:none;margin-top:10px;">
-                    <input type="text" name="nova_localizacao"
-                        placeholder="Localização (opcional)">
+                    <input type="text" name="nova_localizacao" placeholder="Localização (opcional)">
                 </div>
             </div>
-
 
             <!-- Part Number -->
             <div class="form-group">
@@ -75,6 +81,18 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
                         placeholder="Digite ou selecione o part number"
                         autocomplete="off">
                     <div id="pnDropdown" class="autocomplete-dropdown" style="display:none;"></div>
+                </div>
+                <!-- Aviso de PN encerrado -->
+                <div id="erroPartNumberEncerrado" style="display:none; margin-top:6px;
+                     padding:8px 12px; background:#f8d7da; border:1px solid #f5c6cb;
+                     border-radius:6px; color:#721c24; font-size:13px; font-weight:600;">
+                    ⚠️ Este partnumber já foi ENCERRADO! Não é possível fazer novas contagens.
+                </div>
+                <!-- Aviso de nova contagem ativa -->
+                <div id="avisoNovaContagem" style="display:none; margin-top:6px;
+                     padding:8px 12px; background:#d1ecf1; border:1px solid #bee5eb;
+                     border-radius:6px; color:#0c5460; font-size:13px; font-weight:600;">
+                    🔄 Nova contagem ativada para este PN — registre a quantidade normalmente.
                 </div>
                 <div id="novoPnDiv" style="display:none;margin-top:10px;">
                     <input type="text" name="nova_descricao" placeholder="Descrição (opcional)">
@@ -123,6 +141,21 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
         </div>
     </div>
 
+    <style>
+        @media screen and (max-width: 600px) {
+            .cards-container {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+            }
+
+            .card {
+                margin-bottom: 0;
+                width: 100% !important;
+            }
+        }
+    </style>
+
     <!-- Filtros -->
     <div class="form-container" style="padding:20px;">
         <form method="GET" action="?pagina=contagem" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
@@ -135,17 +168,6 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
                 <label style="font-size:12px;margin-bottom:4px;display:block;">Depósito:</label>
                 <input type="text" name="deposito" value="<?= htmlspecialchars($_GET['deposito'] ?? '') ?>" placeholder="Filtrar...">
             </div>
-            <!-- <div style="flex:1;min-width:140px;"> -->
-            <!-- <label style="font-size:12px;margin-bottom:4px;display:block;">Status:</label>
-                <select name="status">
-                    <option value="">Todos</option>
-                    <?php foreach (['primaria', 'concluida', 'divergente', 'terceira'] as $s): ?>
-                        <option value="<?= $s ?>" <?= ($_GET['status'] ?? '') === $s ? 'selected' : '' ?>>
-                            </option>
-                            <?= ucfirst($s) ?>
-                    <?php endforeach; ?>http://localhost:8000/public/index.php?pagina=contagem
-                </select> -->
-            <!-- </div> -->
             <div>
                 <button type="submit" class="btn btn-outline btn-sm"><i class="fas fa-filter"></i> Filtrar</button>
                 <a href="?pagina=contagem" class="btn btn-sm" style="background:#eee;color:var(--gray);">
@@ -158,56 +180,75 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
     <!-- Tabela de contagens -->
     <div class="table-container">
         <table>
-            <style>
-                /* Ajuste para mobile: 2 cards por linha */
-                @media screen and (max-width: 600px) {
-                    .cards-container {
-                        display: grid !important;
-                        grid-template-columns: 1fr 1fr;
-                        gap: 12px;
-                    }
-
-                    .card {
-                        margin-bottom: 0;
-                        /* remove margem inferior extra, se houver */
-                        width: 100% !important;
-                        /* garante que ocupe a coluna inteira */
-                    }
-                }
-            </style>
             <thead>
                 <tr>
                     <th>Depósito</th>
                     <th>Part Number</th>
                     <th>Qtd. 1ª</th>
                     <th>Qtd. 2ª</th>
+                    <th>3ª Contagem</th>
                     <th>Qtd. Final</th>
                     <th>Status</th>
                     <th>Contador</th>
                     <th>Data</th>
+                    <th style="min-width:180px;">Ações</th>
                 </tr>
             </thead>
             <tbody>
-
-
                 <?php if (empty($pagination['items'])): ?>
                     <tr>
-                        <td colspan="<?= $isAdmin ? 9 : 8 ?>" style="text-align:center;padding:30px;color:var(--gray);">
+                        <td colspan="10" style="text-align:center;padding:30px;color:var(--gray);">
                             <i class="fas fa-inbox"></i> Nenhuma contagem encontrada.
                         </td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($pagination['items'] as $c): ?>
-                        <tr>
+                        <?php
+                        $finalizado   = (bool) ($c['finalizado'] ?? false);
+                        $numContagens = (int) ($c['numero_contagens_realizadas'] ?? 1);
+
+                        // Cor de fundo da linha
+                        if ($finalizado) {
+                            $corLinha = 'opacity:0.6; background-color:#F8F9FA;';
+                        } else {
+                            $corLinha = match ($c['status']) {
+                                'primaria'   => 'background-color:#FFF3CD; border-left:4px solid #FFC107;',
+                                'divergente' => 'background-color:#F8D7DA; border-left:4px solid #DC3545;',
+                                'concluida'  => 'background-color:#D4EDDA; border-left:4px solid #28A745;',
+                                default      => '',
+                            };
+                        }
+
+                        // Badge de status
+                        if ($finalizado) {
+                            $badge = '<span style="background:#6c757d;color:#fff;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:600;">🔒 Encerrado</span>';
+                        } else {
+                            $badge = match ($c['status']) {
+                                'primaria'   => '<span style="background:#FFC107;color:#000;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:600;">🟠 Em Andamento</span>',
+                                'concluida'  => '<span style="background:#28A745;color:#fff;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:600;">🟢 Concluída</span>',
+                                'divergente' => '<span style="background:#DC3545;color:#fff;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:600;">🔴 Divergente</span>',
+                                default      => '<span style="background:#6c757d;color:#fff;padding:3px 9px;border-radius:4px;font-size:11px;">' . htmlspecialchars($c['status']) . '</span>',
+                            };
+                        }
+
+                        // Verificar se nova contagem está ativa na sessão para este item
+                        $sessionKey      = 'nova_contagem_' . md5($inventarioAtivo['id'] . '|' . $c['partnumber'] . '|' . $c['deposito']);
+                        $novaContagemAtiva = isset($_SESSION[$sessionKey]) && (int)$_SESSION[$sessionKey] === (int)$c['id'];
+                        ?>
+                        <tr style="<?= $corLinha ?>">
                             <td><?= htmlspecialchars($c['deposito']) ?></td>
                             <td>
                                 <strong><?= htmlspecialchars($c['partnumber']) ?></strong>
+                                <?php if ($novaContagemAtiva): ?>
+                                    <br><small style="color:#0c5460;background:#d1ecf1;padding:1px 6px;border-radius:3px;font-size:10px;">🔄 aguardando <?= $numContagens + 1 ?>ª contagem</small>
+                                <?php endif; ?>
                                 <?php if ($c['lote']): ?>
                                     <br><small style="color:var(--gray);">Lote: <?= htmlspecialchars($c['lote']) ?></small>
                                 <?php endif; ?>
                             </td>
                             <td><?= number_format((float)$c['quantidade_primaria'], 2, ',', '.') ?></td>
                             <td><?= $c['quantidade_secundaria'] !== null ? number_format((float)$c['quantidade_secundaria'], 2, ',', '.') : '—' ?></td>
+                            <td><?= $c['quantidade_terceira']  !== null ? number_format((float)$c['quantidade_terceira'],  2, ',', '.') : '—' ?></td>
                             <td>
                                 <?php if ($c['quantidade_final'] !== null): ?>
                                     <strong style="color:var(--success);"><?= number_format((float)$c['quantidade_final'], 2, ',', '.') ?></strong>
@@ -215,32 +256,31 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
                                     —
                                 <?php endif; ?>
                             </td>
-                            <td>
-                                <span class="status-badge status-<?= htmlspecialchars($c['status']) ?>">
-                                    <?= htmlspecialchars($c['status']) ?>
-                                </span>
-                            </td>
+                            <td><?= $badge ?></td>
                             <td style="font-size:13px;"><?= htmlspecialchars($c['usuario_nome'] ?? '—') ?></td>
                             <td style="font-size:12px;white-space:nowrap;">
                                 <?= $c['data_contagem_primaria'] ? date('d/m/Y H:i', strtotime($c['data_contagem_primaria'])) : '—' ?>
+                            <td style="white-space:nowrap;">
+                                <?php if ($finalizado): ?>
+                                    <span style="color:#6c757d;font-size:12px;">🔒 Encerrado</span>
+                                <?php else: ?>
+                                    <button
+                                        onclick="abrirAcaoModal(
+                <?= $c['id'] ?>,
+                '<?= htmlspecialchars(addslashes($c['partnumber'])) ?>',
+                '<?= htmlspecialchars(addslashes($c['deposito'])) ?>',
+                <?= $inventarioAtivo['id'] ?>,
+                <?= $numContagens ?>,
+                <?= $isAdmin ? 'true' : 'false' ?>
+            )"
+                                        style="padding:6px 10px; border:none; border-radius:6px;
+                   background:#0d6efd; color:#fff; cursor:pointer;
+                   font-size:12px; font-weight:600;">
+                                        Ação
+                                    </button>
+                                <?php endif; ?>
                             </td>
-                            <?php if ($isAdmin): ?>
-                                <td>
-                                    <?php if ($c['status'] === 'primaria' || $c['status'] === 'divergente'): ?>
-                                        <?php
-                                        $btnLabel = $c['status'] === 'divergente' ? '3ª Contagem' : '2ª Contagem';
-                                        $prim     = (float)$c['quantidade_primaria'];
-                                        $sec      = (float)($c['quantidade_secundaria'] ?? 0);
-                                        ?>
-                                        <!-- <button class="btn btn-sm btn-outline"
-                                            onclick="abrirModalTerceiraContagem(<?= $c['id'] ?>, <?= $prim ?>, <?= $sec ?>)">
-                                            <i class="fas fa-balance-scale"></i> <?= $btnLabel ?>
-                                        </button> -->
-                                    <?php else: ?>
-                                        <span style="color:var(--gray);font-size:12px;">—</span>
-                                    <?php endif; ?>
-                                </td>
-                            <?php endif; ?>
+
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -274,248 +314,231 @@ $msgClass = str_contains((string) $message, 'sucesso') || str_contains((string) 
     </div>
 <?php endif; ?>
 
+<div id="acaoModal" style="
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+">
+    <div id="modalContent" style="
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        width: 300px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        transform: scale(0.9);
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    ">
+        <h3 style="margin-top: 0;">Escolha a Ação</h3>
+
+        <button id="btnNovaContagem" style="
+            margin-top: 2vh;
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background: #568ddf;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        " onmouseover="this.style.background='#568ddf'" onmouseout="this.style.background='rgb(11, 96, 224)'">
+            ➕ Nova Contagem
+        </button>
+
+        <button id="btnFinalizar" style="
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background: #de4251;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        " onmouseover="this.style.background='#de4251'" onmouseout="this.style.background='rgb(199, 27, 44)'">
+            🔒 Finalizar Contagem
+        </button>
+
+        <button onclick="fecharAcaoModal()" style="
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #c3c3c3;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        " onmouseover="this.style.background='#ccc'" onmouseout="this.style.background='rgb(236, 236, 236)'">
+            Cancelar
+        </button>
+    </div>
+</div>
+
 <script>
-    const depositos = <?= json_encode(array_column($depositos, 'deposito')) ?>;
-    const partnumbers = <?= json_encode(array_column($partnumbers, 'partnumber')) ?>;
-</script>
-<script>
-    function setupAutocomplete(inputId, dropdownId, dataList, novoDivId = null) {
-        const input = document.getElementById(inputId);
-        const dropdown = document.getElementById(dropdownId);
-        const novoDiv = novoDivId ? document.getElementById(novoDivId) : null;
+    // ============================================================
+    // VARIÁVEIS GLOBAIS (DEFINIDAS PELO PHP)
+    // ============================================================
+    const csrfToken = <?= json_encode($csrfToken) ?>;
+    const inventarioId = <?= (int) $inventarioAtivo['id'] ?>;
+    // As variáveis depositos e partnumbers devem estar definidas antes
+    // Verifique se elas estão presentes no seu script original (provavelmente sim)
 
-        input.addEventListener('input', function() {
-            const value = this.value.toLowerCase();
-            dropdown.innerHTML = '';
+    // ============================================================
+    // CONTEXTO DO MODAL
+    // ============================================================
+    let acaoAtual = null;
 
-            if (!value) {
-                dropdown.style.display = 'none';
-                if (novoDiv) novoDiv.style.display = 'none';
-                return;
-            }
+    function abrirAcaoModal(id, partnumber, deposito, inventarioId, numContagens, isAdmin) {
+        acaoAtual = {
+            id: id,
+            partnumber: partnumber,
+            deposito: deposito,
+            inventarioId: inventarioId,
+            numContagens: numContagens,
+            isAdmin: isAdmin
+        };
 
-            const matches = dataList.filter(item =>
-                item.toLowerCase().includes(value)
-            );
+        const modal = document.getElementById('acaoModal');
+        const modalContent = document.getElementById('modalContent');
 
-            matches.forEach(item => {
-                const option = document.createElement('div');
-                option.className = 'autocomplete-item';
-                option.textContent = item;
-
-                option.onclick = () => {
-                    input.value = item;
-                    dropdown.style.display = 'none';
-                    if (novoDiv) novoDiv.style.display = 'none';
-                };
-
-                dropdown.appendChild(option);
-            });
-
-            dropdown.style.display = matches.length ? 'block' : 'none';
-
-            // Se não encontrou, mostrar campos extras
-            if (novoDiv) {
-                const existe = dataList.some(item =>
-                    item.toLowerCase() === value
-                );
-                novoDiv.style.display = existe ? 'none' : 'block';
-            }
-        });
-
-        document.addEventListener('click', function(e) {
-            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.style.display = 'none';
-            }
-        });
+        modal.style.display = 'flex';
+        setTimeout(() => {
+            modal.style.opacity = '1';
+            modalContent.style.transform = 'scale(1)';
+        }, 10);
     }
 
-    // Inicializar
-    setupAutocomplete('depositoInput', 'depositoDropdown', depositos, 'novoDepositoDiv');
-    setupAutocomplete('partnumberInput', 'pnDropdown', partnumbers, 'novoPnDiv');
-</script>
+    function fecharAcaoModal() {
+        const modal = document.getElementById('acaoModal');
+        const modalContent = document.getElementById('modalContent');
 
-<script>
-    (function() {
-        const input = document.getElementById("partnumberInput");
-        const dropdown = document.getElementById("pnDropdown");
-        const novoDiv = document.getElementById("novoPnDiv");
-
-        if (!input || !dropdown) return;
-
-        input.addEventListener("input", function() {
-            const value = this.value.trim().toLowerCase();
-            dropdown.innerHTML = "";
-
-            if (!value) {
-                dropdown.style.display = "none";
-                novoDiv.style.display = "none";
-                return;
-            }
-
-            const matches = partnumbers.filter(pn =>
-                pn.toLowerCase().includes(value)
-            );
-
-            // Criar opções
-            matches.slice(0, 10).forEach(pn => {
-                const option = document.createElement("div");
-                option.className = "autocomplete-item";
-                option.textContent = pn;
-
-                option.addEventListener("mousedown", function(e) {
-                    e.preventDefault(); // evita perder o foco
-                    input.value = pn;
-                    dropdown.style.display = "none";
-                    novoDiv.style.display = "none";
-                });
-
-                dropdown.appendChild(option);
-            });
-
-            dropdown.style.display = matches.length ? "block" : "none";
-
-            // Mostrar campos de novo PN se não existir
-            const existe = partnumbers.some(pn =>
-                pn.toLowerCase() === value
-            );
-
-            novoDiv.style.display = existe ? "none" : "block";
-        });
-
-        // Fechar dropdown ao clicar fora
-        document.addEventListener("click", function(e) {
-            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.style.display = "none";
-            }
-        });
-    })();
-</script>
-
-<script>
-    input.addEventListener("input", function() {
-        const value = this.value.trim().toLowerCase();
-        dropdown.innerHTML = "";
-
-        if (!value) {
-            dropdown.style.display = "none";
-            novoDiv.style.display = "none";
-            return;
-        }
-
-        const matches = partnumbers.filter(pn =>
-            pn.toLowerCase().includes(value)
-        );
-
-        matches.slice(0, 10).forEach(pn => {
-            const option = document.createElement("div");
-            option.className = "autocomplete-item";
-            option.textContent = pn;
-
-            option.addEventListener("mousedown", function(e) {
-                e.preventDefault();
-                input.value = pn;
-                dropdown.style.display = "none";
-                novoDiv.style.display = "none";
-            });
-
-            dropdown.appendChild(option);
-        });
-
-        dropdown.style.display = matches.length ? "block" : "none";
-
-        const existe = partnumbers.some(pn =>
-            pn.toLowerCase() === value
-        );
-
-        novoDiv.style.display = existe ? "none" : "block";
-    });
-
-    function toggleOutroDeposito(val) {
-        const div = document.getElementById('novoDepositoDiv');
-        const input = document.getElementById('novoDeposito');
-        div.style.display = val === 'outro' ? 'block' : 'none';
-        if (val === 'outro') {
-            input.setAttribute('required', '');
-        } else {
-            input.removeAttribute('required');
-        }
+        modal.style.opacity = '0';
+        modalContent.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+            modal.style.display = 'none';
+            acaoAtual = null;
+        }, 300);
     }
 
-
-    const depositos = <?= json_encode(array_column($depositos, 'deposito')) ?>;
-    const partnumbers = <?= json_encode(array_column($partnumbers, 'partnumber')) ?>;
-
-    function setupAutocomplete(inputId, dropdownId, dataList, novoDivId = null) {
-        const input = document.getElementById(inputId);
-        const dropdown = document.getElementById(dropdownId);
-        const novoDiv = novoDivId ? document.getElementById(novoDivId) : null;
-
-        if (!input || !dropdown) return;
-
-        input.addEventListener('input', function() {
-            const value = this.value.trim().toLowerCase();
-            dropdown.innerHTML = '';
-
-            if (!value) {
-                dropdown.style.display = 'none';
-                if (novoDiv) novoDiv.style.display = 'none';
-                return;
-            }
-
-            const matches = dataList.filter(item =>
-                item.toLowerCase().includes(value)
-            );
-
-            matches.slice(0, 10).forEach(item => {
-                const option = document.createElement('div');
-                option.className = 'autocomplete-item';
-                option.textContent = item;
-
-                option.addEventListener('mousedown', function(e) {
-                    e.preventDefault();
-                    input.value = item;
-                    dropdown.style.display = 'none';
-                    if (novoDiv) novoDiv.style.display = 'none';
-                });
-
-                dropdown.appendChild(option);
-            });
-
-            dropdown.style.display = matches.length ? 'block' : 'none';
-
-            if (novoDiv) {
-                const existe = dataList.some(item =>
-                    item.toLowerCase() === value
-                );
-                novoDiv.style.display = existe ? 'none' : 'block';
-            }
-        });
-
-        document.addEventListener('click', function(e) {
-            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.style.display = 'none';
-            }
-        });
-    }
-
+    // ============================================================
+    // LISTENERS
+    // ============================================================
     document.addEventListener('DOMContentLoaded', function() {
-        setupAutocomplete('depositoInput', 'depositoDropdown', depositos, 'novoDepositoDiv');
-        setupAutocomplete('partnumberInput', 'pnDropdown', partnumbers, 'novoPnDiv');
+        const btnNova = document.getElementById('btnNovaContagem');
+        const btnFinalizar = document.getElementById('btnFinalizar');
+        const modal = document.getElementById('acaoModal');
 
-        // botão de submit
-        const form = document.getElementById('formContagem');
-        if (form) {
-            form.addEventListener('submit', function() {
-                const btn = document.getElementById('btnRegistrar');
-                if (typeof this.checkValidity === 'function' && !this.checkValidity()) {
-                    return;
+        if (btnNova) {
+            btnNova.addEventListener('click', function() {
+                if (!acaoAtual) return;
+                fecharAcaoModal();
+                ativarNovaContagem(
+                    acaoAtual.id,
+                    acaoAtual.partnumber,
+                    acaoAtual.deposito,
+                    acaoAtual.inventarioId,
+                    acaoAtual.numContagens
+                );
+            });
+        }
+
+        if (btnFinalizar) {
+            btnFinalizar.addEventListener('click', function() {
+                if (!acaoAtual) return;
+                fecharAcaoModal();
+                confirmarEncerramento(
+                    acaoAtual.id,
+                    acaoAtual.partnumber
+                );
+            });
+        }
+
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    fecharAcaoModal();
                 }
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
             });
         }
     });
-</script>
 
-<?php require SRC_PATH . '/Views/layout/footer.php'; ?>
+    // ============================================================
+    // FUNÇÃO ATIVAR NOVA CONTAGEM
+    // ============================================================
+    async function ativarNovaContagem(contagemId, partnumber, deposito, invId, numAtual) {
+        const proxima = numAtual + 1;
+        const confirmado = confirm(
+            'Ativar ' + proxima + 'ª contagem para:\n"' + partnumber + '" — ' + deposito + '\n\n' +
+            'Após confirmar, o operador deve registrar o partnumber normalmente pelo formulário acima.\n' +
+            'A quantidade digitada será salva como ' + proxima + 'ª contagem.'
+        );
+        if (!confirmado) return;
+
+        try {
+            const fd = new FormData();
+            fd.append('csrf_token', csrfToken);
+            fd.append('contagem_id', contagemId);
+            fd.append('partnumber', partnumber);
+            fd.append('deposito', deposito);
+            fd.append('inventario_id', invId);
+
+            const r = await fetch('?pagina=ajax&acao=ativar_nova_contagem', {
+                method: 'POST',
+                body: fd
+            });
+            const data = await r.json();
+
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('⚠ ' + (data.message || 'Erro ao ativar nova contagem.'));
+            }
+        } catch (err) {
+            console.error(err); // <-- Adicione isso para ver o erro real no console
+            alert('Erro de comunicação com o servidor.');
+        }
+    }
+
+    // ============================================================
+    // FUNÇÃO CONFIRMAR ENCERRAMENTO
+    // ============================================================
+    async function confirmarEncerramento(contagemId, partnumber) {
+        const confirmado = confirm(
+            '⚠️ ENCERRAR CONTAGEM\n\n' +
+            'Partnumber: "' + partnumber + '"\n\n' +
+            'Após encerrar:\n' +
+            '• Nenhuma nova contagem poderá ser registrada para este item\n' +
+            '• O operador verá uma mensagem de erro se tentar registrá-lo\n\n' +
+            'Deseja continuar?'
+        );
+        if (!confirmado) return;
+
+        try {
+            const fd = new FormData();
+            fd.append('csrf_token', csrfToken);
+            fd.append('contagem_id', contagemId);
+
+            const r = await fetch('?pagina=ajax&acao=finalizar_contagem', {
+                method: 'POST',
+                body: fd
+            });
+            const data = await r.json();
+
+            if (data.success) {
+                alert('🔒 ' + data.message);
+                location.reload();
+            } else {
+                alert('⚠ ' + (data.message || 'Erro ao encerrar contagem.'));
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Erro de comunicação com o servidor.');
+        }
+    }
+</script>

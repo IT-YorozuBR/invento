@@ -61,7 +61,8 @@ $router->post('login', [App\Controllers\AuthController::class, 'processLogin']);
 $router->get('logout', [App\Controllers\AuthController::class, 'logout']);
 
 // Rotas AJAX
-$router->get('ajax',   [App\Controllers\AjaxController::class, 'handle']);
+$router->get('ajax',  [App\Controllers\AjaxController::class, 'handle']);
+$router->post('ajax', [App\Controllers\AjaxController::class, 'handle']);
 
 // Rotas de exportação
 $router->get('exportar', [App\Controllers\ExportController::class, 'handle']);

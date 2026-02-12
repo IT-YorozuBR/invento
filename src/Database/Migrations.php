@@ -148,9 +148,11 @@ class Migrations
      */
     private static function runAlterations(mysqli $conn): void
     {
-        // Nenhuma alteração pendente além das colunas já na criação da tabela.
-        // Exemplo de como adicionar no futuro:
-        // self::addColumnIfNotExists($conn, 'contagens', 'nova_coluna', 'VARCHAR(100) NULL');
+        // Campos para controle de múltiplas contagens e finalização
+        self::addColumnIfNotExists($conn, 'contagens', 'finalizado', 'BOOLEAN DEFAULT FALSE');
+        self::addColumnIfNotExists($conn, 'contagens', 'numero_contagens_realizadas', 'TINYINT DEFAULT 1');
+        self::addColumnIfNotExists($conn, 'contagens', 'pode_nova_contagem', 'BOOLEAN DEFAULT TRUE');
+        self::addColumnIfNotExists($conn, 'contagens', 'data_finalizacao', 'TIMESTAMP NULL');
     }
 
     private static function addColumnIfNotExists(

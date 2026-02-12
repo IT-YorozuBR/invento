@@ -34,21 +34,67 @@ class ExportService
         ];
 
         $meta = [
-            ['INVENTÁRIO',   $inventario['codigo']],
-            ['DESCRIÇÃO',    $inventario['descricao']],
-            ['DATA INÍCIO',  $this->fmtDate($inventario['data_inicio'])],
-            ['DATA FIM',     $this->fmtDate($inventario['data_fim'])],
-            ['ADMINISTRADOR',$inventario['admin_nome']],
-            ['STATUS',       $inventario['status']],
+            ['INVENTÁRIO',    $inventario['codigo']],
+            ['DESCRIÇÃO',     $inventario['descricao']],
+            ['DATA INÍCIO',   $this->fmtDate($inventario['data_inicio'])],
+            ['DATA FIM',      $this->fmtDate($inventario['data_fim'])],
+            ['ADMINISTRADOR', $inventario['admin_nome']],
+            ['STATUS',        $inventario['status']],
             [],
         ];
 
         $data = $this->formatRows($rows);
 
         match (strtolower($format)) {
-            'csv'   => $this->exportCsv($meta, $headers, $data, $inventario['codigo']),
-            'txt'   => $this->exportTxt($meta, $headers, $data, $inventario['codigo']),
-            default => $this->exportXlsx($meta, $headers, $data, $inventario['codigo']),
+            'csv'         => $this->exportCsv($meta, $headers, $data, $inventario['codigo']),
+            'txt'         => $this->exportTxt($meta, $headers, $data, $inventario['codigo']),
+            'consolidado' => $this->exportConsolidado($inventarioId, 'xlsx'),
+            default       => $this->exportXlsx($meta, $headers, $data, $inventario['codigo']),
+        };
+    }
+
+    /**
+     * Exporta relatório consolidado agrupando todos os registros de partnumber
+     * independente do depósito, somando as quantidades.
+     */
+    public function exportConsolidado(int $inventarioId, string $format = 'xlsx'): void
+    {
+        $inventario = $this->inventarioModel->findById($inventarioId);
+        if (!$inventario) {
+            http_response_code(404);
+            die('Inventário não encontrado.');
+        }
+
+        $rows = $this->contagemModel->exportarDadosConsolidados($inventarioId);
+
+        $headers = [
+            'Part Number', 'Descrição', 'Unidade',
+            'Qtd. Total', 'Nº Depósitos', 'Detalhes por Depósito',
+        ];
+
+        $meta = [
+            ['INVENTÁRIO',    $inventario['codigo']],
+            ['DESCRIÇÃO',     $inventario['descricao']],
+            ['RELATÓRIO',     'CONSOLIDADO POR PARTNUMBER'],
+            ['DATA GERAÇÃO',  date('d/m/Y H:i:s')],
+            [],
+        ];
+
+        $data = array_map(fn($r) => [
+            $r['partnumber']          ?? '',
+            $r['descricao_item']      ?? '',
+            $r['unidade_medida']      ?? '',
+            $this->fmtNum($r['quantidade_total'] ?? null),
+            (string) ($r['num_depositos'] ?? 0),
+            $r['detalhes_depositos']  ?? '',
+        ], $rows);
+
+        $code = $inventario['codigo'] . '_consolidado';
+
+        match (strtolower($format)) {
+            'csv'   => $this->exportCsv($meta, $headers, $data, $code),
+            'txt'   => $this->exportTxt($meta, $headers, $data, $code),
+            default => $this->exportXlsx($meta, $headers, $data, $code),
         };
     }
 

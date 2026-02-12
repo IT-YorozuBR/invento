@@ -28,6 +28,26 @@ class Router
             $page = 'login';
         }
 
+        // Roteamento especial para ações AJAX (POST ?pagina=ajax&acao=xxx)
+        if ($page === 'ajax' && $method === 'POST') {
+            $acao = $_GET['acao'] ?? $_POST['acao'] ?? '';
+            $ajaxMethodMap = [
+                'verificar_finalizado'    => 'verificarFinalizado',
+                'verificar_sessao_contagem' => 'verificarSessaoContagem',
+                'ativar_nova_contagem'    => 'ativarNovaContagem',
+                'cancelar_nova_contagem'  => 'cancelarNovaContagem',
+                'nova_contagem'           => 'novaContagem',
+                'finalizar_contagem'      => 'finalizarContagem',
+            ];
+            if (isset($ajaxMethodMap[$acao])) {
+                $controllerClass = \App\Controllers\AjaxController::class;
+                $actionMethod    = $ajaxMethodMap[$acao];
+                $controller      = new $controllerClass();
+                $controller->$actionMethod();
+                return;
+            }
+        }
+
         $handler = $this->routes[$method][$page]
             ?? $this->routes['GET'][$page]
             ?? null;
