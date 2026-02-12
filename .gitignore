@@ -15,7 +15,7 @@ Thumbs.db
 .idea/
 *.sublime-workspace
 *.sublime-project
-
+*.zip
 *.tmp
 *.bak
 .env
