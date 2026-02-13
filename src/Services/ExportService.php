@@ -154,6 +154,12 @@ class ExportService
     private function exportCsv(array $meta, array $headers, array $data, string $code): void
     {
         $filename = "inventario_{$code}_" . date('Y-m-d_H-i-s') . '.csv';
+
+        // Limpar qualquer output buffering (warnings, notices, etc.) antes de enviar headers
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+
         header('Content-Type: text/csv; charset=utf-8');
         header("Content-Disposition: attachment; filename=\"{$filename}\"");
         header('Cache-Control: max-age=0');
@@ -161,12 +167,13 @@ class ExportService
         $out = fopen('php://output', 'w');
         fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF)); // BOM UTF-8
 
+        // Parâmetro $escape='' explícito para evitar deprecated no PHP 8.2+
         foreach ($meta as $row) {
-            fputcsv($out, $row, ';');
+            fputcsv($out, $row, ';', '"', '');
         }
-        fputcsv($out, $headers, ';');
+        fputcsv($out, $headers, ';', '"', '');
         foreach ($data as $row) {
-            fputcsv($out, $row, ';');
+            fputcsv($out, $row, ';', '"', '');
         }
         fclose($out);
         exit;

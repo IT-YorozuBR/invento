@@ -24,13 +24,13 @@ $msgClass = str_contains((string) $message, 'sucesso')
     ? 'sucesso' : 'erro';
 
 // Verificar se há alguma nova contagem ativa na sessão (para indicar ao admin)
-$novasContagensAtivas = [];
-foreach ($_SESSION as $key => $val) {
-    if (str_starts_with($key, 'nova_contagem_')) {
-        $novasContagensAtivas[$key] = $val;
-    }
-}
-?>
+// $novasContagensAtivas = [];
+// foreach ($_SESSION as $key => $val) {
+//     if (str_starts_with($key, 'nova_contagem_')) {
+//         $novasContagensAtivas[$key] = $val;
+//     }
+// }
+// ?>
 
 <!-- Flash message -->
 <?php if (!empty($message)): ?>
@@ -379,18 +379,219 @@ foreach ($_SESSION as $key => $val) {
         </button>
     </div>
 </div>
-
 <script>
     // ============================================================
-    // VARIÁVEIS GLOBAIS (DEFINIDAS PELO PHP)
+    // VARIÁVEIS GLOBAIS (INJETADAS PELO PHP)
     // ============================================================
     const csrfToken = <?= json_encode($csrfToken) ?>;
     const inventarioId = <?= (int) $inventarioAtivo['id'] ?>;
-    // As variáveis depositos e partnumbers devem estar definidas antes
-    // Verifique se elas estão presentes no seu script original (provavelmente sim)
+
+    // AUTOCOMPLETE: arrays simples com os nomes
+    const depositos = <?= json_encode(array_column($depositos, 'deposito')) ?>;
+    const partnumbers = <?= json_encode(array_column($partnumbers, 'partnumber')) ?>;
+
 
     // ============================================================
-    // CONTEXTO DO MODAL
+    // AUTOCOMPLETE (DEPÓSITO E PART NUMBER)
+    // ============================================================
+    function setupAutocomplete(inputId, dropdownId, dataList, novoDivId = null) {
+        const input = document.getElementById(inputId);
+        const dropdown = document.getElementById(dropdownId);
+        const novoDiv = novoDivId ? document.getElementById(novoDivId) : null;
+
+        if (!input || !dropdown) return;
+
+        input.addEventListener('input', function() {
+            const value = this.value.trim().toLowerCase();
+            dropdown.innerHTML = '';
+            esconderAvisos();
+
+            if (!value) {
+                dropdown.style.display = 'none';
+                if (novoDiv) novoDiv.style.display = 'none';
+                return;
+            }
+
+            const matches = dataList.filter(item => item.toLowerCase().includes(value));
+
+            matches.slice(0, 10).forEach(item => {
+                const option = document.createElement('div');
+                option.className = 'autocomplete-item';
+                option.textContent = item;
+                option.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    input.value = item;
+                    dropdown.style.display = 'none';
+                    if (novoDiv) novoDiv.style.display = 'none';
+                    input.dispatchEvent(new Event('blur'));
+                });
+                dropdown.appendChild(option);
+            });
+
+            dropdown.style.display = matches.length ? 'block' : 'none';
+
+            if (novoDiv) {
+                const existe = dataList.some(item => item.toLowerCase() === value);
+                novoDiv.style.display = existe ? 'none' : 'block';
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+    }
+
+    function esconderAvisos() {
+        const erro = document.getElementById('erroPartNumberEncerrado');
+        const aviso = document.getElementById('avisoNovaContagem');
+        if (erro) erro.style.display = 'none';
+        if (aviso) aviso.style.display = 'none';
+    }
+
+    // ============================================================
+    // VALIDAÇÃO AO PERDER O FOCO (BLUR)
+    // ============================================================
+    let _validacaoCache = {};
+
+    async function validarCombinacaoPN() {
+        const pn = document.getElementById('partnumberInput').value.trim();
+        const dep = document.getElementById('depositoInput').value.trim();
+
+        esconderAvisos();
+        if (!pn || !dep) return;
+
+        const cacheKey = pn + '|' + dep;
+        let dados = _validacaoCache[cacheKey];
+
+        if (!dados) {
+            try {
+                const fd = new FormData();
+                fd.append('partnumber', pn);
+                fd.append('deposito', dep);
+                const r = await fetch('?pagina=ajax&acao=verificar_finalizado', {
+                    method: 'POST',
+                    body: fd
+                });
+                dados = await r.json();
+                _validacaoCache[cacheKey] = dados;
+            } catch (e) {
+                return;
+            }
+        }
+
+        if (dados.finalizado) {
+            const erroDiv = document.getElementById('erroPartNumberEncerrado');
+            if (erroDiv) erroDiv.style.display = 'block';
+            document.getElementById('partnumberInput').value = '';
+            document.getElementById('partnumberInput').focus();
+            delete _validacaoCache[cacheKey];
+            return;
+        }
+
+        // Verificar se há nova contagem ativa na sessão
+        if (dados.existe && (dados.status === 'primaria' || dados.status === 'divergente')) {
+            try {
+                const fd2 = new FormData();
+                fd2.append('partnumber', pn);
+                fd2.append('deposito', dep);
+                fd2.append('inventario_id', inventarioId);
+                const r2 = await fetch('?pagina=ajax&acao=verificar_sessao_contagem', {
+                    method: 'POST',
+                    body: fd2
+                });
+                if (r2.ok) {
+                    const d2 = await r2.json();
+                    if (d2.ativa) {
+                        const avisoDiv = document.getElementById('avisoNovaContagem');
+                        if (avisoDiv) avisoDiv.style.display = 'block';
+                    }
+                }
+            } catch (e) {
+                // silencioso
+            }
+        }
+    }
+
+    // ============================================================
+    // INICIALIZAÇÃO DO AUTOCOMPLETE E VALIDAÇÃO
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicializa autocomplete
+        setupAutocomplete('depositoInput', 'depositoDropdown', depositos, 'novoDepositoDiv');
+        setupAutocomplete('partnumberInput', 'pnDropdown', partnumbers, 'novoPnDiv');
+
+        const pnInput = document.getElementById('partnumberInput');
+        const depInput = document.getElementById('depositoInput');
+
+        if (pnInput) {
+            pnInput.addEventListener('blur', validarCombinacaoPN);
+            pnInput.addEventListener('input', function() {
+                esconderAvisos();
+                _validacaoCache = {};
+            });
+        }
+        if (depInput) {
+            depInput.addEventListener('blur', validarCombinacaoPN);
+        }
+
+        // Submit: verificar encerrado antes de enviar
+        const form = document.getElementById('formContagem');
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                const pn = pnInput.value.trim();
+                const dep = depInput.value.trim();
+
+                if (pn && dep) {
+                    const cacheKey = pn + '|' + dep;
+                    let dados = _validacaoCache[cacheKey];
+                    if (!dados) {
+                        e.preventDefault();
+                        const fd = new FormData();
+                        fd.append('partnumber', pn);
+                        fd.append('deposito', dep);
+                        try {
+                            const r = await fetch('?pagina=ajax&acao=verificar_finalizado', {
+                                method: 'POST',
+                                body: fd
+                            });
+                            dados = await r.json();
+                            _validacaoCache[cacheKey] = dados;
+                        } catch (_) {
+                            dados = {
+                                finalizado: false
+                            };
+                        }
+
+                        if (dados.finalizado) {
+                            document.getElementById('erroPartNumberEncerrado').style.display = 'block';
+                            pnInput.value = '';
+                            pnInput.focus();
+                            return;
+                        }
+                        form.submit();
+                        return;
+                    }
+
+                    if (dados.finalizado) {
+                        e.preventDefault();
+                        document.getElementById('erroPartNumberEncerrado').style.display = 'block';
+                        pnInput.value = '';
+                        pnInput.focus();
+                        return;
+                    }
+                }
+
+                const btn = document.getElementById('btnRegistrar');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
+            });
+        }
+    });
+
+    // ============================================================
+    // MODAL DE AÇÕES (CORRIGIDO)
     // ============================================================
     let acaoAtual = null;
 
@@ -406,6 +607,19 @@ foreach ($_SESSION as $key => $val) {
 
         const modal = document.getElementById('acaoModal');
         const modalContent = document.getElementById('modalContent');
+        const btnNova = document.getElementById('btnNovaContagem');
+
+        // Mostrar/esconder botão de nova contagem conforme fase e permissão
+        if (btnNova) {
+            if (!isAdmin || numContagens >= 3) {
+                // Não-admin ou já está na 3ª contagem: esconde botão
+                btnNova.style.display = 'none';
+            } else {
+                btnNova.style.display = 'block';
+                const proxima = numContagens + 1;
+                btnNova.textContent = '➕ Liberar ' + proxima + 'ª Contagem';
+            }
+        }
 
         modal.style.display = 'flex';
         setTimeout(() => {
@@ -427,7 +641,7 @@ foreach ($_SESSION as $key => $val) {
     }
 
     // ============================================================
-    // LISTENERS
+    // LISTENERS DO MODAL
     // ============================================================
     document.addEventListener('DOMContentLoaded', function() {
         const btnNova = document.getElementById('btnNovaContagem');
@@ -438,13 +652,14 @@ foreach ($_SESSION as $key => $val) {
             btnNova.addEventListener('click', function() {
                 if (!acaoAtual) return;
                 fecharAcaoModal();
-                ativarNovaContagem(
-                    acaoAtual.id,
-                    acaoAtual.partnumber,
-                    acaoAtual.deposito,
-                    acaoAtual.inventarioId,
-                    acaoAtual.numContagens
-                );
+                // Decide qual fase liberar com base no número de contagens atuais
+                if (acaoAtual.numContagens === 1) {
+                    liberarSegundaContagem(acaoAtual.id);
+                } else if (acaoAtual.numContagens === 2) {
+                    liberarTerceiraContagem(acaoAtual.id);
+                } else {
+                    alert('Número máximo de contagens já atingido.');
+                }
             });
         }
 
@@ -468,43 +683,62 @@ foreach ($_SESSION as $key => $val) {
         }
     });
 
-    // ============================================================
-    // FUNÇÃO ATIVAR NOVA CONTAGEM
-    // ============================================================
-    async function ativarNovaContagem(contagemId, partnumber, deposito, invId, numAtual) {
-        const proxima = numAtual + 1;
-        const confirmado = confirm(
-            'Ativar ' + proxima + 'ª contagem para:\n"' + partnumber + '" — ' + deposito + '\n\n' +
-            'Após confirmar, o operador deve registrar o partnumber normalmente pelo formulário acima.\n' +
-            'A quantidade digitada será salva como ' + proxima + 'ª contagem.'
-        );
-        if (!confirmado) return;
+    function liberarSegundaContagem(contagemId) {
+        if (!confirm('Deseja liberar a SEGUNDA contagem para este item?')) return;
 
-        try {
-            const fd = new FormData();
-            fd.append('csrf_token', csrfToken);
-            fd.append('contagem_id', contagemId);
-            fd.append('partnumber', partnumber);
-            fd.append('deposito', deposito);
-            fd.append('inventario_id', invId);
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('contagem_id', contagemId);
 
-            const r = await fetch('?pagina=ajax&acao=ativar_nova_contagem', {
+        fetch('?pagina=ajax&acao=liberar_segunda', {
                 method: 'POST',
                 body: fd
-            });
-            const data = await r.json();
-
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('⚠ ' + (data.message || 'Erro ao ativar nova contagem.'));
-            }
-        } catch (err) {
-            console.error(err); // <-- Adicione isso para ver o erro real no console
-            alert('Erro de comunicação com o servidor.');
-        }
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.success ? '✅ ' + d.message : '❌ ' + d.message);
+                if (d.success) location.reload();
+            })
+            .catch(e => alert('Erro de comunicação: ' + e));
     }
 
+    function liberarTerceiraContagem(contagemId) {
+        if (!confirm('Deseja liberar a TERCEIRA contagem para este item?')) return;
+
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('contagem_id', contagemId);
+
+        fetch('?pagina=ajax&acao=liberar_terceira', {
+                method: 'POST',
+                body: fd
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.success ? '✅ ' + d.message : '❌ ' + d.message);
+                if (d.success) location.reload();
+            })
+            .catch(e => alert('Erro de comunicação: ' + e));
+    }
+
+    function finalizarContagem(contagemId) {
+        if (!confirm('FINALIZAR? Não pode ser desfeito!')) return;
+
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('contagem_id', contagemId);
+
+        fetch('?pagina=ajax&acao=finalizar_contagem', {
+                method: 'POST',
+                body: fd
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.success ? '✅ ' + d.message : '❌ ' + d.message);
+                if (d.success) location.reload();
+            })
+            .catch(e => alert('Erro de comunicação: ' + e));
+    }
     // ============================================================
     // FUNÇÃO CONFIRMAR ENCERRAMENTO
     // ============================================================

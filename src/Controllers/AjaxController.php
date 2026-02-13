@@ -40,129 +40,6 @@ class AjaxController
     }
 
     /**
-     * POST ?pagina=ajax&acao=cancelar_nova_contagem
-     * Remove da sessão a ativação de nova contagem.
-     */
-    public function cancelarNovaContagem(): void
-    {
-        header('Content-Type: application/json; charset=utf-8');
-
-        if (!Security::isAuthenticated() || !Security::isAdmin()) {
-            echo json_encode(['success' => false, 'message' => 'Permissão negada']);
-            exit;
-        }
-
-        if (!Security::validateCsrfToken($_POST['csrf_token'] ?? '')) {
-            echo json_encode(['success' => false, 'message' => 'Token inválido']);
-            exit;
-        }
-
-        $partnumber   = Security::sanitize($_POST['partnumber']   ?? '');
-        $deposito     = Security::sanitize($_POST['deposito']     ?? '');
-        $inventarioId = (int) ($_POST['inventario_id'] ?? 0);
-
-        if (empty($partnumber) || empty($deposito) || $inventarioId <= 0) {
-            echo json_encode(['success' => false, 'message' => 'Dados inválidos']);
-            exit;
-        }
-
-        $sessionKey = 'nova_contagem_' . md5($inventarioId . '|' . $partnumber . '|' . $deposito);
-        unset($_SESSION[$sessionKey]);
-
-        echo json_encode(['success' => true]);
-        exit;
-    }
-
-    /**
-     * POST ?pagina=ajax&acao=verificar_sessao_contagem
-     * Verifica se há nova contagem ativa na sessão para o PN+depósito.
-     */
-    public function verificarSessaoContagem(): void
-    {
-        header('Content-Type: application/json; charset=utf-8');
-
-        if (!Security::isAuthenticated()) {
-            echo json_encode(['ativa' => false]);
-            exit;
-        }
-
-        $partnumber   = Security::sanitize($_POST['partnumber']   ?? '');
-        $deposito     = Security::sanitize($_POST['deposito']     ?? '');
-        $inventarioId = (int) ($_POST['inventario_id'] ?? 0);
-
-        if (empty($partnumber) || empty($deposito) || $inventarioId <= 0) {
-            echo json_encode(['ativa' => false]);
-            exit;
-        }
-
-        $sessionKey = 'nova_contagem_' . md5($inventarioId . '|' . $partnumber . '|' . $deposito);
-        $ativa      = isset($_SESSION[$sessionKey]) && (int)$_SESSION[$sessionKey] > 0;
-
-        echo json_encode(['ativa' => $ativa]);
-        exit;
-    }
-
-    /**
-     * POST ?pagina=ajax&acao=ativar_nova_contagem
-     * Ativa na sessão que o próximo registro deste partnumber+deposito
-     * deve ser tratado como 2ª ou 3ª contagem (sem exibir modal ao operador).
-     */
-    public function ativarNovaContagem(): void
-    {
-        header('Content-Type: application/json; charset=utf-8');
-
-        if (!Security::isAuthenticated()) {
-            echo json_encode(['success' => false, 'message' => 'Não autenticado']);
-            exit;
-        }
-
-        if (!Security::isAdmin()) {
-            echo json_encode(['success' => false, 'message' => 'Permissão negada']);
-            exit;
-        }
-
-        if (!Security::validateCsrfToken($_POST['csrf_token'] ?? '')) {
-            echo json_encode(['success' => false, 'message' => 'Token inválido']);
-            exit;
-        }
-
-        $contagemId   = (int) ($_POST['contagem_id']  ?? 0);
-        $partnumber   = Security::sanitize($_POST['partnumber']  ?? '');
-        $deposito     = Security::sanitize($_POST['deposito']    ?? '');
-        $inventarioId = (int) ($_POST['inventario_id'] ?? 0);
-
-        // ===== NORMALIZAÇÃO OBRIGATÓRIA =====
-        $partnumber = strtoupper(trim($partnumber));
-        $deposito   = strtoupper(trim($deposito));
-        // ====================================
-
-        if ($contagemId <= 0 || $partnumber === '' || $deposito === '' || $inventarioId <= 0) {
-            echo json_encode(['success' => false, 'message' => 'Dados inválidos']);
-            exit;
-        }
-
-        $model     = new Contagem();
-        $validacao = $model->podeIniciarNovaContagem($contagemId);
-
-        if (!$validacao['pode']) {
-            echo json_encode(['success' => false, 'message' => $validacao['mensagem']]);
-            exit;
-        }
-
-        // Geração da chave APÓS normalização
-        $sessionKey = 'nova_contagem_' . md5($inventarioId . '|' . $partnumber . '|' . $deposito);
-        $_SESSION[$sessionKey] = $contagemId;
-
-        echo json_encode([
-            'success'  => true,
-            'proxima'  => $validacao['numero_proxima_contagem'],
-            'message'  => 'Pronto! A próxima leitura do PN será registrada como ' .
-                $validacao['numero_proxima_contagem'] . 'ª contagem.',
-        ]);
-        exit;
-    }
-
-    /**
      * POST ?pagina=ajax&acao=verificar_finalizado
      * Verifica se um partnumber/depósito já está finalizado.
      */
@@ -200,15 +77,20 @@ class AjaxController
     }
 
     /**
-     * POST ?pagina=ajax&acao=nova_contagem
-     * Registra 2ª ou 3ª contagem.
+     * POST ?pagina=ajax&acao=liberar_segunda
+     * Admin libera segunda contagem
      */
-    public function novaContagem(): void
+    public function liberarSegunda(): void
     {
         header('Content-Type: application/json; charset=utf-8');
 
         if (!Security::isAuthenticated()) {
             echo json_encode(['success' => false, 'message' => 'Não autenticado']);
+            exit;
+        }
+
+        if (!Security::isAdmin()) {
+            echo json_encode(['success' => false, 'message' => 'Apenas administradores podem liberar contagens.']);
             exit;
         }
 
@@ -218,29 +100,55 @@ class AjaxController
         }
 
         $contagemId = (int) ($_POST['contagem_id'] ?? 0);
-        $quantidade = (float) ($_POST['quantidade'] ?? 0);
 
-        if ($contagemId <= 0 || $quantidade <= 0) {
-            echo json_encode(['success' => false, 'message' => 'Dados inválidos. Quantidade deve ser maior que zero.']);
+        if ($contagemId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID de contagem inválido']);
             exit;
         }
 
-        $model     = new Contagem();
-        $validacao = $model->podeIniciarNovaContagem($contagemId);
+        $result = (new Contagem())->iniciarSegundaContagem($contagemId);
+        echo json_encode($result);
+        exit;
+    }
 
-        if (!$validacao['pode']) {
-            echo json_encode(['success' => false, 'message' => $validacao['mensagem']]);
+    /**
+     * POST ?pagina=ajax&acao=liberar_terceira
+     * Admin libera terceira contagem
+     */
+    public function liberarTerceira(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if (!Security::isAuthenticated()) {
+            echo json_encode(['success' => false, 'message' => 'Não autenticado']);
             exit;
         }
 
-        $result = $model->registrarNovaContagem($contagemId, $quantidade, Security::currentUserId());
+        if (!Security::isAdmin()) {
+            echo json_encode(['success' => false, 'message' => 'Apenas administradores podem liberar contagens.']);
+            exit;
+        }
+
+        if (!Security::validateCsrfToken($_POST['csrf_token'] ?? '')) {
+            echo json_encode(['success' => false, 'message' => 'Token de segurança inválido']);
+            exit;
+        }
+
+        $contagemId = (int) ($_POST['contagem_id'] ?? 0);
+
+        if ($contagemId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID de contagem inválido']);
+            exit;
+        }
+
+        $result = (new Contagem())->iniciarTerceiraContagem($contagemId);
         echo json_encode($result);
         exit;
     }
 
     /**
      * POST ?pagina=ajax&acao=finalizar_contagem
-     * Finaliza uma contagem.
+     * Finaliza uma contagem manualmente
      */
     public function finalizarContagem(): void
     {
@@ -270,6 +178,59 @@ class AjaxController
 
         $result = (new Contagem())->finalizarContagem($contagemId);
         echo json_encode($result);
+        exit;
+    }
+
+    /**
+     * POST ?pagina=ajax&acao=verificar_status_contagem
+     * Verifica status atual de uma contagem (para atualizar UI)
+     */
+    public function verificarStatusContagem(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if (!Security::isAuthenticated()) {
+            echo json_encode(['error' => 'Não autenticado']);
+            exit;
+        }
+
+        $partnumber = strtoupper(trim(Security::sanitize($_POST['partnumber'] ?? '')));
+        $deposito   = strtoupper(trim(Security::sanitize($_POST['deposito']   ?? '')));
+
+        if (empty($partnumber) || empty($deposito)) {
+            echo json_encode(['existe' => false]);
+            exit;
+        }
+
+        $inventario = (new Inventario())->findAtivo();
+        if (!$inventario) {
+            echo json_encode(['existe' => false]);
+            exit;
+        }
+
+        $contagem = (new Contagem())->findOpenByPartnumber(
+            $inventario['id'],
+            $partnumber,
+            $deposito
+        );
+
+        if (!$contagem) {
+            echo json_encode(['existe' => false]);
+            exit;
+        }
+
+        echo json_encode([
+            'existe' => true,
+            'id' => $contagem['id'],
+            'numero_contagens' => (int)$contagem['numero_contagens_realizadas'],
+            'pode_nova' => (bool)$contagem['pode_nova_contagem'],
+            'finalizado' => (bool)$contagem['finalizado'],
+            'status' => $contagem['status'],
+            'quantidade_primaria' => (float)$contagem['quantidade_primaria'],
+            'quantidade_secundaria' => $contagem['quantidade_secundaria'] ? (float)$contagem['quantidade_secundaria'] : null,
+            'quantidade_terceira' => $contagem['quantidade_terceira'] ? (float)$contagem['quantidade_terceira'] : null,
+            'quantidade_final' => $contagem['quantidade_final'] ? (float)$contagem['quantidade_final'] : null,
+        ]);
         exit;
     }
 }

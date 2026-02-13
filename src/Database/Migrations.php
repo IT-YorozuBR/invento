@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Database;
@@ -11,6 +12,7 @@ class Migrations
     public static function run(): void
     {
         try {
+            $port = $_ENV['DB_PORT'] ?? '3307';
             $host = $_ENV['DB_HOST'] ?? 'localhost';
             $user = $_ENV['DB_USER'] ?? '';
             $pass = $_ENV['DB_PASS'] ?? '';

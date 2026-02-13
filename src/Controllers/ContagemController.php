@@ -75,8 +75,6 @@ class ContagemController
 
         if ($acao === 'registrar') {
             $this->processRegistro($inventarioAtivo['id']);
-        } elseif ($acao === 'segunda_contagem') {
-            $this->processSegundaContagem();
         }
 
         header('Location: ?pagina=contagem');
@@ -89,30 +87,13 @@ class ContagemController
 
     private function processRegistro(int $inventarioId): void
     {
-
         $deposito   = strtoupper(trim(Security::sanitize($_POST['deposito']   ?? '')));
         $partnumber = strtoupper(trim(Security::sanitize($_POST['partnumber'] ?? '')));
         $quantidade = (float) ($_POST['quantidade'] ?? 0);
 
-
-
-        $existing = $this->contagem->findOpenByPartnumber($inventarioId, $partnumber, $deposito);
-        if ($existing) {
-            // segurança: converter campos relevantes
-            $numContagens = (int) ($existing['numero_contagens_realizadas'] ?? 1);
-            $podeNova     = (int) ($existing['pode_nova_contagem'] ?? 0);
-
-            // Se a contagem ainda permite nova contagem e não alcançou o máximo (3)
-            if ($podeNova === 1 && $numContagens < 3) {
-                $result = $this->contagem->registrarNovaContagem(
-                    (int) $existing['id'],
-                    $quantidade,
-                    Security::currentUserId()
-                );
-                $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
-                return;
-            }
-            // se não pode nova contagem, continua o fluxo normal (cria nova primária)
+        if (empty($deposito) || empty($partnumber)) {
+            $_SESSION['flash_error'] = 'Depósito e Part Number são obrigatórios.';
+            return;
         }
 
         if ($quantidade <= 0) {
@@ -120,36 +101,29 @@ class ContagemController
             return;
         }
 
-        // ------------------------------------------------------------
-        // 3. Verificar se há uma nova contagem ativa na sessão
-        // ------------------------------------------------------------
-        $sessionKey = 'nova_contagem_' . md5($inventarioId . '|' . $partnumber . '|' . $deposito);
+        // Verificar se já existe contagem aberta para este PN + depósito
+        $existing = $this->contagem->findOpenByPartnumber($inventarioId, $partnumber, $deposito);
 
-        if (isset($_SESSION[$sessionKey])) {
-            // É uma SEGUNDA (ou TERCEIRA) contagem
-            $contagemId = (int) $_SESSION[$sessionKey];
-
+        if ($existing) {
+            // Já existe uma contagem aberta — somar ou avançar fase via Model
             $result = $this->contagem->registrarNovaContagem(
-                $contagemId,
+                (int) $existing['id'],
                 $quantidade,
                 Security::currentUserId()
             );
-
-            unset($_SESSION[$sessionKey]); // Remove a flag (já utilizada)
-
             $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
             return;
         }
 
         // ------------------------------------------------------------
-        // 4. FLUXO NORMAL: PRIMEIRA CONTAGEM (com suporte a "outro")
+        // Não existe contagem aberta: criar a PRIMEIRA CONTAGEM
         // ------------------------------------------------------------
 
         // Suporte a novo depósito
         if ($deposito === 'OUTRO' && !empty($_POST['nova_localizacao'])) {
             $novoDeposito = strtoupper(trim(Security::sanitize($_POST['nova_localizacao'])));
             $this->deposito->save($novoDeposito, Security::sanitize($_POST['nova_localizacao'] ?? ''));
-            $deposito = $novoDeposito; // substitui para uso na contagem
+            $deposito = $novoDeposito;
         }
 
         // Suporte a novo partnumber
@@ -160,18 +134,14 @@ class ContagemController
                 Security::sanitize($_POST['nova_descricao'] ?? ''),
                 Security::sanitize($_POST['nova_unidade'] ?? 'UN')
             );
-            $partnumber = $novoPartnumber; // substitui para uso na contagem
+            $partnumber = $novoPartnumber;
         }
 
-        // ------------------------------------------------------------
-        // 5. Touch nos modelos (atualiza timestamp)
-        // ------------------------------------------------------------
+        // Touch nos modelos
         $this->deposito->touch($deposito);
         $this->partnumber->touch($partnumber, Security::sanitize($_POST['descricao'] ?? ''));
 
-        // ------------------------------------------------------------
-        // 6. Dados extras para a contagem
-        // ------------------------------------------------------------
+        // Dados extras para a contagem
         $extra = [
             'descricao' => Security::sanitize($_POST['descricao'] ?? ''),
             'unidade'   => Security::sanitize($_POST['unidade']   ?? 'UN'),
@@ -179,9 +149,6 @@ class ContagemController
             'validade'  => $_POST['validade'] ?? null,
         ];
 
-        // ------------------------------------------------------------
-        // 7. Registrar a primeira contagem
-        // ------------------------------------------------------------
         $result = $this->contagem->registrarPrimaria(
             $inventarioId,
             Security::currentUserId(),
@@ -189,25 +156,6 @@ class ContagemController
             $partnumber,
             $quantidade,
             $extra
-        );
-
-        $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
-    }
-
-    private function processSegundaContagem(): void
-    {
-        $contagemId = (int) ($_POST['contagem_id']         ?? 0);
-        $quantidade = (float) ($_POST['quantidade_secundaria'] ?? 0);
-
-        if ($contagemId <= 0 || $quantidade <= 0) {
-            $_SESSION['flash_error'] = 'Dados inválidos para segunda contagem.';
-            return;
-        }
-
-        $result = $this->contagem->registrarSegundaContagem(
-            $contagemId,
-            $quantidade,
-            Security::currentUserId()
         );
 
         $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];

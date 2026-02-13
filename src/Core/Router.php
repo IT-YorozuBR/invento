@@ -32,12 +32,11 @@ class Router
         if ($page === 'ajax' && $method === 'POST') {
             $acao = $_GET['acao'] ?? $_POST['acao'] ?? '';
             $ajaxMethodMap = [
-                'verificar_finalizado'    => 'verificarFinalizado',
-                'verificar_sessao_contagem' => 'verificarSessaoContagem',
-                'ativar_nova_contagem'    => 'ativarNovaContagem',
-                'cancelar_nova_contagem'  => 'cancelarNovaContagem',
-                'nova_contagem'           => 'novaContagem',
-                'finalizar_contagem'      => 'finalizarContagem',
+                'verificar_finalizado'      => 'verificarFinalizado',
+                'verificar_status_contagem' => 'verificarStatusContagem',
+                'liberar_segunda'           => 'liberarSegunda',
+                'liberar_terceira'          => 'liberarTerceira',
+                'finalizar_contagem'        => 'finalizarContagem',
             ];
             if (isset($ajaxMethodMap[$acao])) {
                 $controllerClass = \App\Controllers\AjaxController::class;
