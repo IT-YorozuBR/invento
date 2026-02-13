@@ -23,7 +23,6 @@ class Migrations
                 throw new Exception('Erro: ' . $conn->connect_error);
             }
 
-            // Criar banco de dados se não existir
             $conn->query("CREATE DATABASE IF NOT EXISTS `{$name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
             $conn->select_db($name);
 
@@ -91,7 +90,7 @@ class Migrations
                 data_contagem_primaria TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 data_contagem_secundaria TIMESTAMP NULL,
                 data_contagem_terceira TIMESTAMP NULL,
-                status ENUM('primaria','concluida','divergente','pendente_validacao','ajustado','terceira') DEFAULT 'primaria',
+                status ENUM('primaria','concluida','divergente','pendente_validacao','ajustado','terceira','secundaria') DEFAULT 'primaria',
                 precisa_segunda_contagem BOOLEAN DEFAULT FALSE,
                 precisa_terceira_contagem BOOLEAN DEFAULT FALSE,
                 motivo_divergencia TEXT NULL,
@@ -126,11 +125,28 @@ class Migrations
                 total_registros INT DEFAULT 1,
                 INDEX idx_deposito (deposito)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+            /* -------------------------------------------------------
+             * Tabela de notificações para o admin.
+             * Leve: sem campo "lida" — o JS controla via timestamp
+             * armazenado em sessionStorage do navegador.
+             * Só INSERT ao registrar, nunca UPDATE.
+             * ------------------------------------------------------- */
+            'notificacoes_admin' => "CREATE TABLE IF NOT EXISTS notificacoes_admin (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                inventario_id INT NOT NULL,
+                usuario_nome VARCHAR(100) NOT NULL,
+                partnumber VARCHAR(100) NOT NULL,
+                deposito VARCHAR(100) NOT NULL,
+                fase TINYINT DEFAULT 1 COMMENT '1=primaria,2=secundaria,3=terceira',
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_inventario_criado (inventario_id, criado_em)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         ];
 
-        foreach ($tables as $name => $sql) {
+        foreach ($tables as $tblName => $sql) {
             if (!$conn->query($sql)) {
-                throw new Exception("Erro ao criar tabela {$name}: " . $conn->error);
+                throw new Exception("Erro ao criar tabela {$tblName}: " . $conn->error);
             }
         }
     }
@@ -144,17 +160,13 @@ class Migrations
             VALUES ('Operador Padrão', 'operador', 'operador', 'operador@empresa.com')");
     }
 
-    /**
-     * Alterações incrementais de schema (idempotentes).
-     * Adicione novos ALTER TABLE aqui ao evoluir o banco.
-     */
     private static function runAlterations(mysqli $conn): void
     {
         // Campos para controle de múltiplas contagens e finalização
-        self::addColumnIfNotExists($conn, 'contagens', 'finalizado', 'BOOLEAN DEFAULT FALSE');
-        self::addColumnIfNotExists($conn, 'contagens', 'numero_contagens_realizadas', 'TINYINT DEFAULT 1');
-        self::addColumnIfNotExists($conn, 'contagens', 'pode_nova_contagem', 'BOOLEAN DEFAULT TRUE');
-        self::addColumnIfNotExists($conn, 'contagens', 'data_finalizacao', 'TIMESTAMP NULL');
+        self::addColumnIfNotExists($conn, 'contagens', 'finalizado',                   'BOOLEAN DEFAULT FALSE');
+        self::addColumnIfNotExists($conn, 'contagens', 'numero_contagens_realizadas',  'TINYINT DEFAULT 1');
+        self::addColumnIfNotExists($conn, 'contagens', 'pode_nova_contagem',           'BOOLEAN DEFAULT TRUE');
+        self::addColumnIfNotExists($conn, 'contagens', 'data_finalizacao',             'TIMESTAMP NULL');
     }
 
     private static function addColumnIfNotExists(

@@ -23,28 +23,48 @@ class Router
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         $page   = $_GET['pagina'] ?? 'login';
 
-        // Redirecionar página raiz para login
         if ($page === '' || $page === '/') {
             $page = 'login';
         }
 
-        // Roteamento especial para ações AJAX (POST ?pagina=ajax&acao=xxx)
-        if ($page === 'ajax' && $method === 'POST') {
+        // ---------------------------------------------------------------
+        // Roteamento especial para ações AJAX
+        // ---------------------------------------------------------------
+        if ($page === 'ajax') {
             $acao = $_GET['acao'] ?? $_POST['acao'] ?? '';
-            $ajaxMethodMap = [
-                'verificar_finalizado'      => 'verificarFinalizado',
-                'verificar_status_contagem' => 'verificarStatusContagem',
-                'liberar_segunda'           => 'liberarSegunda',
-                'liberar_terceira'          => 'liberarTerceira',
-                'finalizar_contagem'        => 'finalizarContagem',
-            ];
-            if (isset($ajaxMethodMap[$acao])) {
-                $controllerClass = \App\Controllers\AjaxController::class;
-                $actionMethod    = $ajaxMethodMap[$acao];
-                $controller      = new $controllerClass();
-                $controller->$actionMethod();
-                return;
+
+            // Mapa de ações POST (requerem CSRF)
+            if ($method === 'POST') {
+                $postMap = [
+                    'verificar_finalizado'      => 'verificarFinalizado',
+                    'verificar_status_contagem' => 'verificarStatusContagem',
+                    'liberar_segunda'           => 'liberarSegunda',
+                    'liberar_terceira'          => 'liberarTerceira',
+                    'finalizar_contagem'        => 'finalizarContagem',
+                ];
+                if (isset($postMap[$acao])) {
+                    $controller = new \App\Controllers\AjaxController();
+                    $controller->{$postMap[$acao]}();
+                    return;
+                }
             }
+
+            // Mapa de ações GET (sem CSRF — somente leitura)
+            if ($method === 'GET') {
+                $getMap = [
+                    'notificacoes' => 'notificacoes',
+                ];
+                if (isset($getMap[$acao])) {
+                    $controller = new \App\Controllers\AjaxController();
+                    $controller->{$getMap[$acao]}();
+                    return;
+                }
+            }
+
+            // Fallback: autocomplete (handle padrão)
+            $controller = new \App\Controllers\AjaxController();
+            $controller->handle();
+            return;
         }
 
         $handler = $this->routes[$method][$page]
@@ -56,7 +76,7 @@ class Router
             return;
         }
 
-        [$controllerClass, $method] = $handler;
+        [$controllerClass, $actionMethod] = $handler;
 
         if (!class_exists($controllerClass)) {
             $this->notFound();
@@ -65,18 +85,17 @@ class Router
 
         $controller = new $controllerClass();
 
-        if (!method_exists($controller, $method)) {
+        if (!method_exists($controller, $actionMethod)) {
             $this->notFound();
             return;
         }
 
-        $controller->$method();
+        $controller->$actionMethod();
     }
 
     private function notFound(): void
     {
         http_response_code(404);
-        // Exibir view de 404 se existir, senão mensagem simples
         $view = SRC_PATH . '/Views/errors/404.php';
         if (file_exists($view)) {
             require $view;

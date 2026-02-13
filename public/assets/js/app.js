@@ -1,649 +1,445 @@
 /* =============================================
-   SISTEMA DE INVENTÁRIO - JAVASCRIPT APRIMORADO
-   Melhorias de UX com Loading States e Feedback
+   SISTEMA DE INVENTÁRIO — JS v2
    ============================================= */
 
-// ---- Configurações Globais ----
 const CONFIG = {
-    DEBOUNCE_DELAY: 300,
-    TOAST_DURATION: 3500,
-    ANIMATION_DURATION: 400,
-    LOADING_MIN_TIME: 500 // Tempo mínimo para exibir loading (evita flash)
+    DEBOUNCE_DELAY:   280,
+    TOAST_DURATION:   4000,
+    ANIMATION_MS:     300,
+    NOTIF_POLL_MS:    45000, // 45s — leve, sem sobrecarregar
 };
 
-// ---- QR Code Scanner ----
+// ============================================================
+// TOAST — substitui alert() e flash msg
+// ============================================================
+const toastQueue = [];
+let toastActive = false;
+
+function showToast(text, type = 'info', duration = CONFIG.TOAST_DURATION) {
+    const icons = { sucesso: '✓', erro: '✕', aviso: '⚠', info: 'ℹ' };
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    // Calcula posição vertical empilhada
+    const offset = (document.querySelectorAll('.toast').length) * 72;
+    toast.style.top = (20 + offset) + 'px';
+
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || icons.info}</span>
+        <span style="flex:1;line-height:1.4">${text}</span>
+        <span class="toast-close">×</span>
+    `;
+
+    document.body.appendChild(toast);
+
+    const remove = () => {
+        if (!toast.isConnected) return;
+        toast.classList.add('saindo');
+        setTimeout(() => toast.remove(), CONFIG.ANIMATION_MS);
+    };
+
+    toast.addEventListener('click', remove);
+    setTimeout(remove, duration);
+    return toast;
+}
+
+// Substitui alert() nativo por toast
+window._origAlert = window.alert;
+window.alert = function(msg) {
+    const isSuccess = msg.startsWith('✅') || msg.startsWith('🔒');
+    const isError   = msg.startsWith('❌') || msg.startsWith('⚠');
+    const type      = isSuccess ? 'sucesso' : isError ? 'erro' : 'info';
+    showToast(msg, type);
+};
+
+// ============================================================
+// BUTTON LOADING
+// ============================================================
+function btnLoading(btn, start = true) {
+    if (start) {
+        if (!btn.dataset.origHtml) btn.dataset.origHtml = btn.innerHTML;
+        btn.classList.add('loading');
+        btn.disabled = true;
+        if (btn.querySelector('.btn-text')) {
+            btn.querySelector('.btn-text').style.opacity = '0';
+        } else {
+            btn.innerHTML = `<span class="btn-text" style="opacity:0">${btn.dataset.origHtml}</span>`;
+        }
+    } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+    }
+}
+
+// ============================================================
+// MODAL DE CONFIRMAÇÃO (substitui confirm())
+// ============================================================
+function showConfirm(msg, onYes, onNo = null) {
+    // Remove modal existente se houver
+    document.getElementById('_confirmdlg')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = '_confirmdlg';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal">
+            <div class="modal-title"><i class="fas fa-question-circle" style="color:var(--warning)"></i> Confirmação</div>
+            <p style="color:#475569;margin-bottom:20px;line-height:1.5">${msg}</p>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button id="_confirmNo"  class="btn btn-ghost">Cancelar</button>
+                <button id="_confirmYes" class="btn btn-primary"><span class="btn-text">Confirmar</span></button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const close = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => overlay.remove(), CONFIG.ANIMATION_MS);
+    };
+
+    overlay.querySelector('#_confirmYes').addEventListener('click', () => { close(); onYes(); });
+    overlay.querySelector('#_confirmNo').addEventListener('click',  () => { close(); if (onNo) onNo(); });
+    overlay.addEventListener('click', e => { if (e.target === overlay) { close(); if (onNo) onNo(); } });
+    document.addEventListener('keydown', function esc(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+    });
+}
+
+// ============================================================
+// QR CODE SCANNER
+// ============================================================
 let html5QrcodeScanner = null;
 let qrCodeActive = false;
 
 function iniciarScannerQR() {
-    if (qrCodeActive) {
-        fecharScannerQR();
-        return;
-    }
+    if (qrCodeActive) { fecharScannerQR(); return; }
 
-    const readerElement = document.getElementById('qr-reader');
-    if (!readerElement) {
-        console.error('Elemento qr-reader não encontrado');
-        return;
-    }
-
-    // Mostrar modal com animação
     const modal = document.getElementById('qrScannerModal');
+    if (!modal) return;
+
     modal.style.display = 'flex';
-    modal.classList.add('fade-in');
     qrCodeActive = true;
 
-    // Configurar scanner
     html5QrcodeScanner = new Html5QrcodeScanner(
-        "qr-reader",
-        {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
-        },
+        'qr-reader',
+        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
         false
     );
-
-    html5QrcodeScanner.render(onScanSuccess, onScanError);
+    html5QrcodeScanner.render(onScanSuccess, () => {});
 }
 
-function onScanSuccess(decodedText, decodedResult) {
-    console.log(`QR Code lido: ${decodedText}`);
-
-    // Feedback visual de sucesso
-    const readerElement = document.getElementById('qr-reader');
-    if (readerElement) {
-        readerElement.style.borderColor = 'var(--success)';
-        readerElement.style.boxShadow = '0 0 20px rgba(39, 174, 96, 0.5)';
-    }
+function onScanSuccess(text) {
+    const reader = document.getElementById('qr-reader');
+    if (reader) { reader.style.borderColor = 'var(--success)'; }
 
     html5QrcodeScanner.clear();
-    
-    setTimeout(() => {
-        fecharScannerQR();
-    }, 300);
+    setTimeout(fecharScannerQR, 300);
 
-    if (decodedText.length >= 4) {
-        const deposito = decodedText.substring(0, 3).toUpperCase();
-        const partnumber = decodedText.substring(3);
-
-        // Preencher campos com animação
-        fillFieldWithAnimation('depositoInput', deposito);
-        fillFieldWithAnimation('partnumberInput', partnumber);
-
-        // Foco na quantidade com delay
+    if (text.length >= 4) {
+        const dep = text.substring(0, 3).toUpperCase();
+        const pn  = text.substring(3);
+        fillFieldAnimated('depositoInput', dep);
+        fillFieldAnimated('partnumberInput', pn);
         setTimeout(() => {
-            const quantidadeInput = document.getElementById('quantidade');
-            if (quantidadeInput) {
-                quantidadeInput.focus();
-                quantidadeInput.classList.add('pulse');
-                setTimeout(() => quantidadeInput.classList.remove('pulse'), 1000);
-            }
-        }, 100);
-
-        showToast(`✓ QR Code lido com sucesso!\nDepósito: ${deposito}\nPart Number: ${partnumber}`, 'sucesso');
+            const q = document.getElementById('quantidade');
+            if (q) { q.focus(); q.classList.add('pulse'); setTimeout(() => q.classList.remove('pulse'), 800); }
+        }, 150);
+        showToast(`QR lido! Depósito: ${dep} | PN: ${pn}`, 'sucesso');
     } else {
-        showToast('⚠ Formato inválido. Esperado: 3 letras (depósito) + partnumber', 'erro');
+        showToast('Formato QR inválido. Esperado: 3 letras + partnumber', 'erro');
     }
-}
-
-function onScanError(errorMessage) {
-    // Não mostrar erros contínuos de scan
 }
 
 function fecharScannerQR() {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear().catch(err => console.error('Erro ao limpar scanner:', err));
-        html5QrcodeScanner = null;
-    }
-    
+    html5QrcodeScanner?.clear().catch(() => {});
+    html5QrcodeScanner = null;
     const modal = document.getElementById('qrScannerModal');
-    if (modal) {
-        modal.classList.add('fade-out');
-        setTimeout(() => {
-            modal.style.display = 'none';
-            modal.classList.remove('fade-out', 'fade-in');
-        }, CONFIG.ANIMATION_DURATION);
-    }
-    
+    if (modal) { modal.classList.add('fade-out'); setTimeout(() => { modal.style.display = 'none'; modal.classList.remove('fade-out'); }, CONFIG.ANIMATION_MS); }
     qrCodeActive = false;
 }
 
-// ---- Utilitário para preenchimento animado de campos ----
-function fillFieldWithAnimation(fieldId, value) {
-    const field = document.getElementById(fieldId);
-    if (!field) return;
-
-    // Adiciona classe de animação
-    field.classList.add('success');
-    field.value = value;
-
-    // Disparar evento 'input' para atualizar autocomplete
-    const evt = new Event('input', { bubbles: true });
-    field.dispatchEvent(evt);
-
-    // Remover classe após animação
-    setTimeout(() => {
-        field.classList.remove('success');
-    }, 1000);
+function fillFieldAnimated(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value;
+    el.classList.add('success');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    setTimeout(() => el.classList.remove('success'), 900);
 }
 
-// ---- Gerenciador de Loading States em Botões ----
-class ButtonLoadingManager {
-    constructor(button) {
-        this.button = button;
-        this.originalContent = button.innerHTML;
-        this.startTime = null;
-    }
-
-    start() {
-        this.startTime = Date.now();
-        this.button.classList.add('loading');
-        this.button.disabled = true;
-        
-        // Salvar conteúdo original
-        this.button.setAttribute('data-original-content', this.originalContent);
-    }
-
-    async end(minDelay = CONFIG.LOADING_MIN_TIME) {
-        const elapsed = Date.now() - this.startTime;
-        const remainingTime = Math.max(0, minDelay - elapsed);
-
-        // Aguarda tempo mínimo se necessário
-        if (remainingTime > 0) {
-            await new Promise(resolve => setTimeout(resolve, remainingTime));
-        }
-
-        this.button.classList.remove('loading');
-        this.button.disabled = false;
-    }
-
-    error() {
-        this.button.classList.remove('loading');
-        this.button.disabled = false;
-        this.button.classList.add('error');
-        
-        setTimeout(() => {
-            this.button.classList.remove('error');
-        }, 300);
-    }
-}
-
-// ---- Interceptor de formulários com loading ----
-function setupFormWithLoading(formId) {
-    const form = document.getElementById(formId);
-    if (!form) return;
-
-    form.addEventListener('submit', async function(e) {
-        const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
-        if (!submitButton) return;
-
-        const loadingManager = new ButtonLoadingManager(submitButton);
-        loadingManager.start();
-
-        // Se a validação falhar, remover loading
-        const isValid = validateForm(form);
-        if (!isValid) {
-            e.preventDefault();
-            loadingManager.error();
-            return;
-        }
-    });
-}
-
-// ---- Validação de Formulários Aprimorada ----
-function validateForm(form) {
-    let isValid = true;
-    const requiredFields = form.querySelectorAll('[required]');
-    
-    requiredFields.forEach(field => {
-        if (!field.value.trim()) {
-            isValid = false;
-            
-            // Adiciona classe de erro com animação
-            field.classList.add('error');
-            
-            // Feedback visual no label
-            const label = form.querySelector(`label[for="${field.id}"]`);
-            if (label) {
-                label.style.color = 'var(--danger)';
-            }
-            
-            // Remove classe após animação
-            setTimeout(() => {
-                field.classList.remove('error');
-                if (label) {
-                    label.style.color = '';
-                }
-            }, 1000);
-            
-            // Foco no primeiro campo inválido
-            if (isValid === false) {
-                field.focus();
-                field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }
-    });
-    
-    if (!isValid) {
-        showToast('⚠ Preencha todos os campos obrigatórios!', 'erro');
-    }
-    
-    return isValid;
-}
-
-// ---- Inicialização do DOM ----
-document.addEventListener('DOMContentLoaded', function () {
-
-    // ---- Configurar formulários com loading states ----
-    const forms = document.querySelectorAll('form[data-validate]');
-    forms.forEach(form => {
-        setupFormWithLoading(form.id);
-    });
-
-    // ---- Auto-foco no primeiro campo com animação ----
-    const firstInput = document.querySelector('form input:not([type=hidden]):not([readonly])');
-    if (firstInput) {
-        firstInput.focus();
-        firstInput.classList.add('pulse');
-        setTimeout(() => firstInput.classList.remove('pulse'), 1000);
-    }
-
-    // ---- Dropdowns com animações ----
-    document.querySelectorAll('.dropdown-toggle').forEach(toggle => {
-        toggle.addEventListener('click', function (e) {
-            e.stopPropagation();
-            const menu = this.nextElementSibling;
-            const isOpen = menu.style.display === 'block';
-            
-            // Fechar todos os dropdowns
-            document.querySelectorAll('.dropdown-menu').forEach(m => {
-                m.style.display = 'none';
-                m.classList.remove('slide-down');
-            });
-            
-            // Toggle do dropdown atual
-            if (!isOpen) {
-                menu.style.display = 'block';
-                menu.classList.add('slide-down');
-            }
-        });
-    });
-
-    // Fechar dropdowns ao clicar fora
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.dropdown-menu').forEach(m => {
-            m.style.display = 'none';
-            m.classList.remove('slide-down');
-        });
-    });
-
-    // ---- Flash messages com animação de fade ----
-    document.querySelectorAll('.mensagem[data-auto-hide]').forEach(el => {
-        setTimeout(() => {
-            el.classList.add('fade-out');
-            setTimeout(() => el.remove(), CONFIG.ANIMATION_DURATION);
-        }, 4000);
-    });
-
-    // ---- Alerta de saída com dados não salvos ----
-    const contagemForm = document.getElementById('formContagem');
-    if (contagemForm) {
-        let isDirty = false;
-        
-        contagemForm.querySelectorAll('input, select, textarea').forEach(el => {
-            el.addEventListener('change', () => { isDirty = true; });
-        });
-        
-        contagemForm.addEventListener('submit', () => { isDirty = false; });
-        
-        window.addEventListener('beforeunload', e => {
-            if (isDirty) {
-                e.preventDefault();
-                return (e.returnValue = 'Você tem dados não salvos. Deseja sair?');
-            }
-        });
-    }
-
-    // ---- Modal Terceira Contagem com animações ----
-    const overlay = document.getElementById('modalTerceiraContagem');
-    if (overlay) {
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) fecharModal();
-        });
-        
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') fecharModal();
-        });
-    }
-
-    // ---- Adicionar ripple effect em todos os botões ----
-    document.querySelectorAll('.btn').forEach(button => {
-        button.addEventListener('click', function(e) {
-            const ripple = document.createElement('span');
-            const rect = this.getBoundingClientRect();
-            const size = Math.max(rect.width, rect.height);
-            const x = e.clientX - rect.left - size / 2;
-            const y = e.clientY - rect.top - size / 2;
-            
-            ripple.style.width = ripple.style.height = size + 'px';
-            ripple.style.left = x + 'px';
-            ripple.style.top = y + 'px';
-            ripple.classList.add('ripple');
-            
-            this.appendChild(ripple);
-            
-            setTimeout(() => ripple.remove(), 600);
-        });
-    });
-
-    // ---- Observador de elementos para animações ao scroll ----
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('fade-in');
-                observer.unobserve(entry.target);
-            }
-        });
-    }, observerOptions);
-
-    // Observar cards e elementos de tabela
-    document.querySelectorAll('.card, .table-container').forEach(el => {
-        observer.observe(el);
-    });
-});
-
-// ---- Autocomplete Aprimorado ----
-let debounceTimers = {};
-let activeRequests = {};
-
-function autocomplete(inputId, dropdownId, type) {
-    const input = document.getElementById(inputId);
+// ============================================================
+// AUTOCOMPLETE LEVE (usa arrays locais já injetados pelo PHP)
+// ============================================================
+function setupAutocomplete(inputId, dropdownId, dataList, novoDivId = null) {
+    const input    = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
+    const novoDiv  = novoDivId ? document.getElementById(novoDivId) : null;
     if (!input || !dropdown) return;
 
-    // Adicionar indicador de loading no input
-    const loadingIndicator = createLoadingIndicator();
-    input.parentElement.style.position = 'relative';
-
     input.addEventListener('input', function () {
-        clearTimeout(debounceTimers[inputId]);
-        
-        // Cancelar requisição anterior se existir
-        if (activeRequests[inputId]) {
-            activeRequests[inputId].abort();
-        }
+        const val = this.value.trim().toLowerCase();
+        dropdown.innerHTML = '';
 
-        const term = this.value.trim();
-        
-        if (term.length < 2) {
-            dropdown.style.display = 'none';
-            removeLoadingIndicator(loadingIndicator);
-            return;
-        }
+        if (!val) { dropdown.style.display = 'none'; if (novoDiv) novoDiv.style.display = 'none'; return; }
 
-        // Mostrar loading
-        showLoadingIndicator(input, loadingIndicator);
+        const matches = dataList.filter(i => i.toLowerCase().includes(val)).slice(0, 10);
 
-        debounceTimers[inputId] = setTimeout(() => {
-            // Criar AbortController para esta requisição
-            const controller = new AbortController();
-            activeRequests[inputId] = controller;
+        matches.forEach(item => {
+            const d = document.createElement('div');
+            d.className = 'autocomplete-item';
+            d.textContent = item;
+            d.addEventListener('mousedown', e => {
+                e.preventDefault();
+                input.value = item;
+                dropdown.style.display = 'none';
+                if (novoDiv) novoDiv.style.display = 'none';
+                input.dispatchEvent(new Event('blur'));
+            });
+            dropdown.appendChild(d);
+        });
 
-            fetch(`?pagina=ajax&tipo=${type}&termo=${encodeURIComponent(term)}`, {
-                signal: controller.signal
-            })
-                .then(r => r.json())
-                .then(items => {
-                    removeLoadingIndicator(loadingIndicator);
-                    dropdown.innerHTML = '';
-                    
-                    if (!items.length) {
-                        dropdown.style.display = 'none';
-                        return;
-                    }
-
-                    items.forEach((item, index) => {
-                        const div = document.createElement('div');
-                        div.className = 'autocomplete-item';
-                        div.style.animationDelay = `${index * 0.05}s`;
-                        
-                        const label = type === 'partnumber' ? item.partnumber : item.deposito;
-                        const sub = type === 'partnumber' ? item.descricao : item.localizacao;
-                        
-                        div.innerHTML = `<strong>${escHtml(label)}</strong>${sub ? `<small>${escHtml(sub)}</small>` : ''}`;
-                        
-                        div.addEventListener('click', () => {
-                            input.value = label;
-                            dropdown.style.display = 'none';
-                            input.classList.add('success');
-                            input.dispatchEvent(new Event('change'));
-                            
-                            setTimeout(() => {
-                                input.classList.remove('success');
-                            }, 1000);
-                        });
-                        
-                        dropdown.appendChild(div);
-                    });
-                    
-                    dropdown.style.display = 'block';
-                    dropdown.classList.add('slide-down');
-                })
-                .catch(err => {
-                    if (err.name !== 'AbortError') {
-                        removeLoadingIndicator(loadingIndicator);
-                        dropdown.style.display = 'none';
-                        console.error('Erro no autocomplete:', err);
-                    }
-                })
-                .finally(() => {
-                    delete activeRequests[inputId];
-                });
-        }, CONFIG.DEBOUNCE_DELAY);
+        dropdown.style.display = matches.length ? 'block' : 'none';
+        if (novoDiv) novoDiv.style.display = dataList.some(i => i.toLowerCase() === val) ? 'none' : 'block';
     });
 
-    // Fechar dropdown ao clicar fora
     document.addEventListener('click', e => {
-        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-            dropdown.style.display = 'none';
-            dropdown.classList.remove('slide-down');
-        }
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.style.display = 'none';
     });
 
-    // Navegação por teclado no dropdown
+    // Navegação por teclado
     input.addEventListener('keydown', e => {
         const items = dropdown.querySelectorAll('.autocomplete-item');
         if (!items.length) return;
-
-        let currentIndex = Array.from(items).findIndex(item => 
-            item.classList.contains('selected')
-        );
-
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            currentIndex = (currentIndex + 1) % items.length;
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            currentIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
-        } else if (e.key === 'Enter' && currentIndex >= 0) {
-            e.preventDefault();
-            items[currentIndex].click();
-            return;
-        } else {
-            return;
-        }
-
-        items.forEach(item => item.classList.remove('selected'));
-        items[currentIndex].classList.add('selected');
-        items[currentIndex].scrollIntoView({ block: 'nearest' });
+        let idx = Array.from(items).findIndex(i => i.classList.contains('selected'));
+        if (e.key === 'ArrowDown')  { e.preventDefault(); idx = (idx + 1) % items.length; }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = idx <= 0 ? items.length - 1 : idx - 1; }
+        else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].dispatchEvent(new MouseEvent('mousedown')); return; }
+        else return;
+        items.forEach(i => i.classList.remove('selected'));
+        items[idx]?.classList.add('selected');
+        items[idx]?.scrollIntoView({ block: 'nearest' });
     });
 }
 
-// ---- Utilitários para Loading Indicator ----
-function createLoadingIndicator() {
-    const indicator = document.createElement('div');
-    indicator.className = 'loading-spinner';
-    indicator.style.cssText = `
-        position: absolute;
-        right: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        display: none;
-    `;
-    return indicator;
-}
+// ============================================================
+// POLLING DE NOTIFICAÇÕES (admin only, leve)
+// ============================================================
+const NOTIF_KEY = 'notif_last_ts'; // sessionStorage key
 
-function showLoadingIndicator(input, indicator) {
-    if (!indicator.parentElement) {
-        input.parentElement.appendChild(indicator);
+function iniciarPollingNotificacoes() {
+    if (!document.getElementById('btnNotificacoes')) return; // não é admin
+
+    // Inicializa timestamp: usa o armazenado ou 60s atrás
+    if (!sessionStorage.getItem(NOTIF_KEY)) {
+        sessionStorage.setItem(NOTIF_KEY, Math.floor(Date.now() / 1000) - 60);
     }
-    indicator.style.display = 'inline-block';
+
+    function poll() {
+        const desde = sessionStorage.getItem(NOTIF_KEY) || (Math.floor(Date.now() / 1000) - 60);
+
+        fetch(`?pagina=ajax&acao=notificacoes&desde=${desde}`, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data || data.total === 0) return;
+
+            // Atualiza badge
+            const badge = document.getElementById('notifBadge');
+            const bell  = document.getElementById('btnNotificacoes');
+            if (!badge || !bell) return;
+
+            const prevCount = parseInt(badge.dataset.count || '0');
+            const newCount  = prevCount + data.total;
+
+            badge.dataset.count = newCount;
+            badge.textContent   = newCount > 99 ? '99+' : newCount;
+            badge.style.display = 'flex';
+            bell.classList.add('has-new');
+
+            // Re-anima sino
+            bell.querySelector('i').style.animation = 'none';
+            setTimeout(() => {
+                bell.querySelector('i').style.animation = '';
+                bell.querySelector('i').style.animation = 'bellShake 1s ease 0s 2';
+            }, 10);
+
+            // Popula lista
+            const lista = document.getElementById('notifLista');
+            if (!lista) return;
+
+            const vazio = lista.querySelector('.notif-vazio');
+            if (vazio) vazio.remove();
+
+            data.items.forEach(item => {
+                const faseLabel = ['', '1ª', '2ª', '3ª'][item.fase] || item.fase + 'ª';
+                const ago = _timeAgo(item.ts);
+                const el = document.createElement('div');
+                el.className = 'notif-item';
+                el.innerHTML = `
+                    <div class="notif-item-usuario"><i class="fas fa-user-clock"></i> ${_escHtml(item.usuario_nome)}</div>
+                    <div class="notif-item-detalhe">${faseLabel} contagem · <strong>${_escHtml(item.partnumber)}</strong> · ${_escHtml(item.deposito)}</div>
+                    <div class="notif-item-time">${ago}</div>
+                `;
+                lista.prepend(el);
+            });
+
+            // Mantém máximo de 20 itens na lista
+            const all = lista.querySelectorAll('.notif-item');
+            if (all.length > 20) all[all.length - 1].remove();
+
+            // Atualiza timestamp para a próxima poll
+            sessionStorage.setItem(NOTIF_KEY, Math.floor(Date.now() / 1000));
+        })
+        .catch(() => {}); // silencia erros de rede — não é crítico
+    }
+
+    // Primeira poll após 3s (aguarda página carregar)
+    setTimeout(poll, 3000);
+    setInterval(poll, CONFIG.NOTIF_POLL_MS);
 }
 
-function removeLoadingIndicator(indicator) {
-    indicator.style.display = 'none';
+function abrirPainelNotificacoes() {
+    const painel = document.getElementById('painelNotificacoes');
+    const badge  = document.getElementById('notifBadge');
+    const bell   = document.getElementById('btnNotificacoes');
+    if (!painel) return;
+
+    const aberto = painel.style.display !== 'none';
+    painel.style.display = aberto ? 'none' : 'block';
+
+    if (!aberto) {
+        // Zera badge ao abrir
+        if (badge) { badge.style.display = 'none'; badge.dataset.count = '0'; }
+        if (bell)  bell.classList.remove('has-new');
+        // Avança timestamp para não repetir as mesmas notificações
+        sessionStorage.setItem(NOTIF_KEY, Math.floor(Date.now() / 1000));
+    }
 }
 
-// ---- Modal Terceira Contagem com Animações ----
+function fecharPainelNotificacoes() {
+    const painel = document.getElementById('painelNotificacoes');
+    if (painel) painel.style.display = 'none';
+}
+
+// Fecha painel ao clicar fora
+document.addEventListener('click', e => {
+    const painel = document.getElementById('painelNotificacoes');
+    const bell   = document.getElementById('btnNotificacoes');
+    if (painel && painel.style.display !== 'none' && !painel.contains(e.target) && !bell?.contains(e.target)) {
+        painel.style.display = 'none';
+    }
+});
+
+function _timeAgo(ts) {
+    const diff = Math.floor(Date.now() / 1000) - ts;
+    if (diff < 60)   return 'agora mesmo';
+    if (diff < 3600) return Math.floor(diff / 60) + ' min atrás';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h atrás';
+    return Math.floor(diff / 86400) + 'd atrás';
+}
+
+function _escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// VALIDAÇÃO DE FORMULÁRIO
+// ============================================================
+function validateForm(form) {
+    let ok = true;
+    form.querySelectorAll('[required]').forEach(field => {
+        if (!field.value.trim()) {
+            ok = false;
+            field.classList.add('error');
+            const lbl = form.querySelector(`label[for="${field.id}"]`);
+            if (lbl) lbl.style.color = 'var(--danger)';
+            setTimeout(() => {
+                field.classList.remove('error');
+                if (lbl) lbl.style.color = '';
+            }, 1200);
+        }
+    });
+    if (!ok) showToast('Preencha todos os campos obrigatórios!', 'aviso');
+    return ok;
+}
+
+// ============================================================
+// DOM READY
+// ============================================================
+document.addEventListener('DOMContentLoaded', function () {
+
+    // Auto-hide flash messages do servidor
+    document.querySelectorAll('.mensagem[data-auto-hide]').forEach(el => {
+        setTimeout(() => {
+            el.classList.add('fade-out');
+            setTimeout(() => el.remove(), CONFIG.ANIMATION_MS);
+        }, 4500);
+    });
+
+    // Dropdowns
+    document.querySelectorAll('.dropdown-toggle').forEach(toggle => {
+        toggle.addEventListener('click', e => {
+            e.stopPropagation();
+            const menu = toggle.nextElementSibling;
+            const open = menu?.style.display === 'block';
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+            if (!open && menu) menu.style.display = 'block';
+        });
+    });
+    document.addEventListener('click', () =>
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none')
+    );
+
+    // Botões com data-confirm usam showConfirm
+    document.querySelectorAll('[data-confirm]').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            const msg = btn.dataset.confirm;
+            const href = btn.dataset.href || btn.href;
+            showConfirm(msg, () => { if (href) location.href = href; });
+        });
+    });
+
+    // Inicia polling de notificações para admin
+    iniciarPollingNotificacoes();
+});
+
+// ============================================================
+// MODAL TERCEIRA CONTAGEM (legado — mantido para compatibilidade)
+// ============================================================
 function abrirModalTerceiraContagem(contagemId, primaria, secundaria) {
     const overlay = document.getElementById('modalTerceiraContagem');
     if (!overlay) return;
-
     document.getElementById('contagemId').value = contagemId;
     document.getElementById('primeiraContagemValor').textContent = primaria;
-    document.getElementById('segundaContagemValor').textContent = secundaria;
-    
-    const terceiraInput = document.getElementById('quantidadeTerceira');
-    terceiraInput.value = Math.round((primaria + secundaria) / 2);
-    
+    document.getElementById('segundaContagemValor').textContent  = secundaria;
+    const input = document.getElementById('quantidadeTerceira');
+    if (input) input.value = Math.round((primaria + secundaria) / 2);
     overlay.style.display = 'flex';
     overlay.classList.add('fade-in');
-    
-    setTimeout(() => {
-        terceiraInput.focus();
-        terceiraInput.select();
-        terceiraInput.classList.add('pulse');
-        setTimeout(() => terceiraInput.classList.remove('pulse'), 1000);
-    }, CONFIG.ANIMATION_DURATION);
+    setTimeout(() => { input?.focus(); input?.select(); }, 300);
 }
 
 function fecharModal() {
     const overlay = document.getElementById('modalTerceiraContagem');
     if (!overlay) return;
-    
     overlay.classList.add('fade-out');
-    
-    setTimeout(() => {
-        overlay.style.display = 'none';
-        overlay.classList.remove('fade-out', 'fade-in');
-    }, CONFIG.ANIMATION_DURATION);
+    setTimeout(() => { overlay.style.display = 'none'; overlay.classList.remove('fade-out', 'fade-in'); }, CONFIG.ANIMATION_MS);
 }
 
-// ---- Toast Aprimorado com Ícones ----
-function showToast(text, type = 'sucesso') {
-    const icons = {
-        sucesso: '✓',
-        erro: '✕',
-        aviso: '⚠',
-        info: 'ℹ'
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `mensagem ${type}`;
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 9999;
-        max-width: 320px;
-        box-shadow: 0 8px 16px rgba(0,0,0,.2);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    `;
-    
-    const icon = document.createElement('span');
-    icon.style.cssText = `
-        font-size: 20px;
-        font-weight: bold;
-    `;
-    icon.textContent = icons[type] || icons.info;
-    
-    const message = document.createElement('span');
-    message.textContent = text;
-    
-    toast.appendChild(icon);
-    toast.appendChild(message);
-    document.body.appendChild(toast);
-    
-    // Animação de entrada
-    toast.classList.add('slide-down');
-    
-    setTimeout(() => {
-        toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), CONFIG.ANIMATION_DURATION);
-    }, CONFIG.TOAST_DURATION);
-
-    // Fechar ao clicar
-    toast.addEventListener('click', () => {
-        toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), CONFIG.ANIMATION_DURATION);
-    });
-
-    // Adicionar cursor pointer
-    toast.style.cursor = 'pointer';
-}
-
-// ---- Skeleton Loading para Tabelas ----
-function showTableSkeleton(containerId, rows = 5) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-
-    const skeleton = document.createElement('div');
-    skeleton.className = 'table-skeleton';
-    skeleton.innerHTML = `
-        ${Array(rows).fill('').map(() => `
-            <div class="skeleton skeleton-text" style="margin: 10px 0;"></div>
-        `).join('')}
-    `;
-    
-    container.innerHTML = '';
-    container.appendChild(skeleton);
-}
-
-function removeTableSkeleton(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    
-    const skeleton = container.querySelector('.table-skeleton');
-    if (skeleton) {
-        skeleton.classList.add('fade-out');
-        setTimeout(() => skeleton.remove(), CONFIG.ANIMATION_DURATION);
-    }
-}
-
-// ---- Utilitários ----
-function escHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-function confirmar(msg) {
-    return confirm(msg);
-}
-
-// ---- Exportar funções globais ----
-window.ButtonLoadingManager = ButtonLoadingManager;
-window.showToast = showToast;
-window.showTableSkeleton = showTableSkeleton;
-window.removeTableSkeleton = removeTableSkeleton;
+// ============================================================
+// EXPORTS
+// ============================================================
+window.showToast         = showToast;
+window.showConfirm       = showConfirm;
+window.btnLoading        = btnLoading;
+window.setupAutocomplete = setupAutocomplete;
+window.fillFieldAnimated = fillFieldAnimated;
+window.validateForm      = validateForm;
+window.abrirPainelNotificacoes  = abrirPainelNotificacoes;
+window.fecharPainelNotificacoes = fecharPainelNotificacoes;

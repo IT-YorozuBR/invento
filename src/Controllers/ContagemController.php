@@ -8,21 +8,24 @@ use App\Core\Security;
 use App\Models\Contagem;
 use App\Models\Deposito;
 use App\Models\Inventario;
+use App\Models\Notificacao;
 use App\Models\Partnumber;
 
 class ContagemController
 {
-    private Contagem   $contagem;
-    private Inventario $inventario;
-    private Deposito   $deposito;
-    private Partnumber $partnumber;
+    private Contagem    $contagem;
+    private Inventario  $inventario;
+    private Deposito    $deposito;
+    private Partnumber  $partnumber;
+    private Notificacao $notificacao;
 
     public function __construct()
     {
-        $this->contagem   = new Contagem();
-        $this->inventario = new Inventario();
-        $this->deposito   = new Deposito();
-        $this->partnumber = new Partnumber();
+        $this->contagem    = new Contagem();
+        $this->inventario  = new Inventario();
+        $this->deposito    = new Deposito();
+        $this->partnumber  = new Partnumber();
+        $this->notificacao = new Notificacao();
     }
 
     public function index(): void
@@ -41,15 +44,15 @@ class ContagemController
         $csrfToken = Security::generateCsrfToken();
         $page      = max(1, (int) ($_GET['p'] ?? 1));
         $filters   = [
-            'status'      => $_GET['status']      ?? '',
-            'partnumber'  => $_GET['partnumber']  ?? '',
-            'deposito'    => $_GET['deposito']     ?? '',
+            'status'     => $_GET['status']     ?? '',
+            'partnumber' => $_GET['partnumber'] ?? '',
+            'deposito'   => $_GET['deposito']    ?? '',
         ];
 
-        $depositos  = $this->deposito->all();
+        $depositos   = $this->deposito->all();
         $partnumbers = $this->partnumber->all();
-        $pagination = $this->contagem->findPaginated($inventarioAtivo['id'], $page, $filters);
-        $stats      = $this->inventario->getEstatisticas($inventarioAtivo['id']);
+        $pagination  = $this->contagem->findPaginated($inventarioAtivo['id'], $page, $filters);
+        $stats       = $this->inventario->getEstatisticas($inventarioAtivo['id']);
 
         require SRC_PATH . '/Views/contagem/index.php';
     }
@@ -82,7 +85,7 @@ class ContagemController
     }
 
     // -----------------------------------------------------------------------
-    // Private
+    // Private Methods
     // -----------------------------------------------------------------------
 
     private function processRegistro(int $inventarioId): void
@@ -101,32 +104,15 @@ class ContagemController
             return;
         }
 
-        // Verificar se já existe contagem aberta para este PN + depósito
-        $existing = $this->contagem->findOpenByPartnumber($inventarioId, $partnumber, $deposito);
-
-        if ($existing) {
-            // Já existe uma contagem aberta — somar ou avançar fase via Model
-            $result = $this->contagem->registrarNovaContagem(
-                (int) $existing['id'],
-                $quantidade,
-                Security::currentUserId()
-            );
-            $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
-            return;
-        }
-
-        // ------------------------------------------------------------
-        // Não existe contagem aberta: criar a PRIMEIRA CONTAGEM
-        // ------------------------------------------------------------
-
-        // Suporte a novo depósito
+        // ---------------------------------------------------------------
+        // Suporte a "OUTRO" (novo depósito/partnumber)
+        // ---------------------------------------------------------------
         if ($deposito === 'OUTRO' && !empty($_POST['nova_localizacao'])) {
             $novoDeposito = strtoupper(trim(Security::sanitize($_POST['nova_localizacao'])));
             $this->deposito->save($novoDeposito, Security::sanitize($_POST['nova_localizacao'] ?? ''));
             $deposito = $novoDeposito;
         }
 
-        // Suporte a novo partnumber
         if ($partnumber === 'OUTRO' && !empty($_POST['nova_descricao'])) {
             $novoPartnumber = strtoupper(trim(Security::sanitize($_POST['nova_descricao'])));
             $this->partnumber->save(
@@ -137,11 +123,15 @@ class ContagemController
             $partnumber = $novoPartnumber;
         }
 
-        // Touch nos modelos
+        // ---------------------------------------------------------------
+        // Touch (atualizar timestamp de uso)
+        // ---------------------------------------------------------------
         $this->deposito->touch($deposito);
         $this->partnumber->touch($partnumber, Security::sanitize($_POST['descricao'] ?? ''));
 
+        // ---------------------------------------------------------------
         // Dados extras para a contagem
+        // ---------------------------------------------------------------
         $extra = [
             'descricao' => Security::sanitize($_POST['descricao'] ?? ''),
             'unidade'   => Security::sanitize($_POST['unidade']   ?? 'UN'),
@@ -149,6 +139,13 @@ class ContagemController
             'validade'  => $_POST['validade'] ?? null,
         ];
 
+        // ---------------------------------------------------------------
+        // NOVA LÓGICA: Sempre usa registrarPrimaria()
+        // O sistema decide automaticamente:
+        // - Se não existe: cria primeira contagem
+        // - Se existe e pode_nova = FALSE: SOMA na fase atual
+        // - Se existe e pode_nova = TRUE: Avança para próxima fase
+        // ---------------------------------------------------------------
         $result = $this->contagem->registrarPrimaria(
             $inventarioId,
             Security::currentUserId(),
@@ -157,6 +154,28 @@ class ContagemController
             $quantidade,
             $extra
         );
+
+        // ---------------------------------------------------------------
+        // Notificar admin (apenas se operário não for admin)
+        // ---------------------------------------------------------------
+        if ($result['success'] && !Security::isAdmin()) {
+            try {
+                // Buscar contagem atual para saber qual fase está
+                $contagemAtual = $this->contagem->findOpenByPartnumber($inventarioId, $partnumber, $deposito);
+                $fase = $contagemAtual ? (int)$contagemAtual['numero_contagens_realizadas'] : 1;
+                
+                $this->notificacao->criar(
+                    $inventarioId,
+                    Security::currentUserName(),
+                    $partnumber,
+                    $deposito,
+                    $fase
+                );
+            } catch (\Throwable $e) {
+                // Notificação é não-crítica: nunca bloquear o fluxo principal
+                error_log('Notificacao::criar falhou: ' . $e->getMessage());
+            }
+        }
 
         $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
     }

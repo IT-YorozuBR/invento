@@ -2,7 +2,7 @@
 
 /** @var string $csrfToken */
 /** @var string $message */
-$pageTitle = 'Login — Sistema de Inventário';
+$pageTitle = 'Login — Invento';
 require SRC_PATH . '/Views/layout/header.php';
 
 $flashError = $_SESSION['flash_error'] ?? '';
@@ -12,8 +12,10 @@ unset($_SESSION['flash_error']);
 <div class="login-container">
     <div class="login-box">
         <div class="login-header">
-            <h1><i class="fas fa-boxes"></i> Sistema de Inventário</h1>
-            <p>Controle de Inventário Profissional</p>
+
+                <img src="/public/assets/Inserir um subtítulo.png" style="height: 300px"></img>
+                <!-- <h1><i class="fas fa-boxes"></i> Invento</h1>
+            <p>Controle de Inventário Profissional</p> -->
         </div>
 
         <?php if (!empty($flashError)): ?>
@@ -62,7 +64,7 @@ unset($_SESSION['flash_error']);
             </strong>
             <ul style="padding-left:18px;line-height:1.8;">
                 <li><strong>Operadores:</strong> apenas nome e matrícula</li>
-                <li><strong>Administrador:</strong> matrícula <code>admin</code> + senha</li>
+
                 <li><strong>Dúvidas:</strong> contate o supervisor</li>
             </ul>
         </div>

@@ -6,6 +6,7 @@
 $pageTitle = 'Inventários Concluídos';
 require SRC_PATH . '/Views/layout/header.php';
 ?>
+<link rel="icon" type="image/png" href="/public/assets/Inserir um subtítulo.png">
 
 <div class="form-container">
     <h2 class="form-title">

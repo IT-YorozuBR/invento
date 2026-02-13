@@ -1,7 +1,7 @@
 <?php use App\Core\Security; ?>
 <?php if (($_GET['pagina'] ?? 'login') !== 'login' && Security::isAuthenticated()): ?>
 <footer class="footer">
-    <p>&copy; <?= date('Y') ?> Sistema de Inventário </p>
+    <p>&copy; <?= date('Y') ?> Invento </p>
     <p style="font-size:12px;opacity:.6;margin-top:4px;">Estrutura MVC &middot; PHP 8+ &middot; MySQL</p>
 </footer>
 <?php endif; ?>

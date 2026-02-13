@@ -1,25 +1,20 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Controllers;
 
 use App\Core\Security;
-use App\Models\Contagem;
 use App\Models\Deposito;
-use App\Models\Inventario;
 use App\Models\Partnumber;
 
-class ContagemController
+class CadastrosController
 {
-    private Contagem   $contagem;
-    private Inventario $inventario;
     private Deposito   $deposito;
     private Partnumber $partnumber;
 
     public function __construct()
     {
-        $this->contagem   = new Contagem();
-        $this->inventario = new Inventario();
         $this->deposito   = new Deposito();
         $this->partnumber = new Partnumber();
     }
@@ -27,178 +22,112 @@ class ContagemController
     public function index(): void
     {
         Security::requireAuth();
-
-        $inventarioAtivo = $this->inventario->findAtivo();
-
-        if (!$inventarioAtivo) {
-            $_SESSION['flash_error'] = 'Não há inventário ativo no momento.';
-            header('Location: ?pagina=dashboard');
-            exit;
-        }
+        Security::requireAdmin(); // Apenas admin pode acessar cadastros
 
         $message   = $this->consumeFlash();
         $csrfToken = Security::generateCsrfToken();
-        $page      = max(1, (int) ($_GET['p'] ?? 1));
-        $filters   = [
-            'status'      => $_GET['status']      ?? '',
-            'partnumber'  => $_GET['partnumber']  ?? '',
-            'deposito'    => $_GET['deposito']     ?? '',
-        ];
 
+        // Buscar todos os depósitos e partnumbers cadastrados
         $depositos   = $this->deposito->all();
         $partnumbers = $this->partnumber->all();
-        $pagination  = $this->contagem->findPaginated($inventarioAtivo['id'], $page, $filters);
-        $stats       = $this->inventario->getEstatisticas($inventarioAtivo['id']);
 
-        require SRC_PATH . '/Views/contagem/index.php';
+        require SRC_PATH . '/Views/cadastros/index.php';
     }
 
     public function handle(): void
     {
         Security::requireAuth();
+        Security::requireAdmin();
 
         if (!Security::validateCsrfToken($_POST['csrf_token'] ?? '')) {
             $_SESSION['flash_error'] = 'Token de segurança inválido.';
-            header('Location: ?pagina=contagem');
+            header('Location: ?pagina=cadastros');
             exit;
         }
 
-        $inventarioAtivo = $this->inventario->findAtivo();
-        if (!$inventarioAtivo) {
-            $_SESSION['flash_error'] = 'Não há inventário ativo.';
-            header('Location: ?pagina=dashboard');
-            exit;
+        $acao = $_POST['acao'] ?? '';
+
+        if ($acao === 'cadastrar_deposito') {
+            $this->cadastrarDeposito();
+        } elseif ($acao === 'cadastrar_partnumber') {
+            $this->cadastrarPartnumber();
+        } elseif ($acao === 'excluir_deposito') {
+            $this->excluirDeposito();
+        } elseif ($acao === 'excluir_partnumber') {
+            $this->excluirPartnumber();
         }
 
-        $acao = $_POST['acao_contagem'] ?? '';
-
-        if ($acao === 'registrar') {
-            $this->processRegistro($inventarioAtivo['id']);
-        } elseif ($acao === 'segunda_contagem') {
-            $this->processSegundaContagem();
-        }
-
-        header('Location: ?pagina=contagem');
+        header('Location: ?pagina=cadastros');
         exit;
     }
 
     // -----------------------------------------------------------------------
-    // Private
+    // Private Methods
     // -----------------------------------------------------------------------
 
-    private function processRegistro(int $inventarioId): void
+    private function cadastrarDeposito(): void
     {
-        $deposito   = Security::sanitize($_POST['deposito']   ?? '');
-        $partnumber = Security::sanitize($_POST['partnumber'] ?? '');
+        $deposito   = strtoupper(trim(Security::sanitize($_POST['deposito'] ?? '')));
+        $localizacao = Security::sanitize($_POST['localizacao'] ?? '');
 
-        // Suporte a "outro" (novo depósito/partnumber)
-        if ($deposito === 'outro' && !empty($_POST['novo_deposito'])) {
-            $deposito = Security::sanitize($_POST['novo_deposito']);
-            $this->deposito->save($deposito, Security::sanitize($_POST['nova_localizacao'] ?? ''));
-        }
-
-        if ($partnumber === 'outro' && !empty($_POST['novo_partnumber'])) {
-            $partnumber = Security::sanitize($_POST['novo_partnumber']);
-            $this->partnumber->save(
-                $partnumber,
-                Security::sanitize($_POST['nova_descricao'] ?? ''),
-                Security::sanitize($_POST['nova_unidade']   ?? 'UN')
-            );
-        }
-
-        $quantidade = (float) ($_POST['quantidade'] ?? 0);
-
-        if ($quantidade <= 0) {
-            $_SESSION['flash_error'] = 'Quantidade deve ser maior que zero.';
+        if (empty($deposito)) {
+            $_SESSION['flash_error'] = 'Nome do depósito é obrigatório.';
             return;
         }
 
-        // ---------------------------------------------------------------
-        // Verificar se este partnumber+deposito está ENCERRADO
-        // ---------------------------------------------------------------
-        $statusAtual = $this->contagem->verificarPartNumberFinalizado(
-            $inventarioId,
-            $partnumber,
-            $deposito
-        );
+        $result = $this->deposito->save($deposito, $localizacao);
 
-        if ($statusAtual['finalizado']) {
-            $_SESSION['flash_error'] =
-                "⚠️ ERRO: O partnumber \"{$partnumber}\" no depósito \"{$deposito}\" já foi ENCERRADO! " .
-                "Não é possível registrar novas contagens.";
-            return;
+        if ($result) {
+            $_SESSION['flash_success'] = "Depósito '{$deposito}' cadastrado com sucesso!";
+        } else {
+            $_SESSION['flash_error'] = 'Erro ao cadastrar depósito. Pode já existir.';
         }
-
-        // ---------------------------------------------------------------
-        // Verificar se há uma "nova contagem" pendente na sessão para
-        // este partnumber+deposito (ativado pelo botão "Nova Contagem")
-        // ---------------------------------------------------------------
-        $sessionKey   = 'nova_contagem_' . md5($inventarioId . '|' . $partnumber . '|' . $deposito);
-        $contagemId   = (int) ($_SESSION[$sessionKey] ?? 0);
-
-        if ($contagemId > 0) {
-            // Há uma contagem aguardando 2ª ou 3ª leitura — processar silenciosamente
-            $validacao = $this->contagem->podeIniciarNovaContagem($contagemId);
-
-            if ($validacao['pode']) {
-                $result = $this->contagem->registrarNovaContagem(
-                    $contagemId,
-                    $quantidade,
-                    Security::currentUserId()
-                );
-                // Limpar a sessão após registrar
-                unset($_SESSION[$sessionKey]);
-
-                $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
-                return;
-            }
-
-            // Se não pode mais (ex: já tem 3), limpar sessão e continuar fluxo normal
-            unset($_SESSION[$sessionKey]);
-        }
-
-        // ---------------------------------------------------------------
-        // Fluxo normal: registrar como contagem primária
-        // ---------------------------------------------------------------
-        $this->deposito->touch($deposito);
-        $this->partnumber->touch($partnumber, Security::sanitize($_POST['descricao'] ?? ''));
-
-        $extra = [
-            'descricao' => Security::sanitize($_POST['descricao'] ?? ''),
-            'unidade'   => Security::sanitize($_POST['unidade']   ?? 'UN'),
-            'lote'      => Security::sanitize($_POST['lote']      ?? '') ?: null,
-            'validade'  => $_POST['validade'] ?? null,
-        ];
-
-        $result = $this->contagem->registrarPrimaria(
-            $inventarioId,
-            Security::currentUserId(),
-            $deposito,
-            $partnumber,
-            $quantidade,
-            $extra
-        );
-
-        $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
     }
 
-    private function processSegundaContagem(): void
+    private function cadastrarPartnumber(): void
     {
-        $contagemId = (int) ($_POST['contagem_id']         ?? 0);
-        $quantidade = (float) ($_POST['quantidade_secundaria'] ?? 0);
+        $partnumber = strtoupper(trim(Security::sanitize($_POST['partnumber'] ?? '')));
+        $descricao  = Security::sanitize($_POST['descricao'] ?? '');
+        $unidade    = Security::sanitize($_POST['unidade'] ?? 'UN');
 
-        if ($contagemId <= 0 || $quantidade <= 0) {
-            $_SESSION['flash_error'] = 'Dados inválidos para segunda contagem.';
+        if (empty($partnumber)) {
+            $_SESSION['flash_error'] = 'Part Number é obrigatório.';
             return;
         }
 
-        $result = $this->contagem->registrarSegundaContagem(
-            $contagemId,
-            $quantidade,
-            Security::currentUserId()
-        );
+        $result = $this->partnumber->save($partnumber, $descricao, $unidade);
 
-        $_SESSION[$result['success'] ? 'flash_success' : 'flash_error'] = $result['message'];
+        if ($result) {
+            $_SESSION['flash_success'] = "Part Number '{$partnumber}' cadastrado com sucesso!";
+        } else {
+            $_SESSION['flash_error'] = 'Erro ao cadastrar Part Number. Pode já existir.';
+        }
+    }
+
+    private function excluirDeposito(): void
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+
+        if ($id <= 0) {
+            $_SESSION['flash_error'] = 'ID inválido.';
+            return;
+        }
+
+        // Aqui você pode adicionar lógica de exclusão se tiver o método no model
+        $_SESSION['flash_error'] = 'Funcionalidade de exclusão ainda não implementada.';
+    }
+
+    private function excluirPartnumber(): void
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+
+        if ($id <= 0) {
+            $_SESSION['flash_error'] = 'ID inválido.';
+            return;
+        }
+
+        // Aqui você pode adicionar lógica de exclusão se tiver o método no model
+        $_SESSION['flash_error'] = 'Funcionalidade de exclusão ainda não implementada.';
     }
 
     private function consumeFlash(): string

@@ -13,6 +13,7 @@ require SRC_PATH . '/Views/layout/header.php';
 $msgClass = str_contains((string) $message, 'sucesso') ? 'sucesso' : 'erro';
 ?>
 
+<link rel="icon" type="image/png" href="/public/assets/Inserir um subtítulo.png">
 <div class="form-container">
     <h2 class="form-title">
         <i class="fas fa-tachometer-alt"></i> Dashboard
