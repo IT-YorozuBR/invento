@@ -20,7 +20,7 @@ $currentPage = $_GET['pagina'] ?? 'login';
 <?php if ($currentPage !== 'login' && Security::isAuthenticated()): ?>
 <nav class="navbar">
     <div class="navbar-brand">
-        <i class="fas fa-boxes"></i>
+        <i class="fa-solid fa-warehouse"></i>
         <span>Invento</span>
     </div>
     <div class="navbar-menu">

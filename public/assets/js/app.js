@@ -53,22 +53,271 @@ window.alert = function(msg) {
 };
 
 // ============================================================
-// BUTTON LOADING
+// BUTTONSTATE — Sistema completo de estados de botão
 // ============================================================
-function btnLoading(btn, start = true) {
-    if (start) {
-        if (!btn.dataset.origHtml) btn.dataset.origHtml = btn.innerHTML;
-        btn.classList.add('loading');
-        btn.disabled = true;
-        if (btn.querySelector('.btn-text')) {
-            btn.querySelector('.btn-text').style.opacity = '0';
-        } else {
-            btn.innerHTML = `<span class="btn-text" style="opacity:0">${btn.dataset.origHtml}</span>`;
+//
+// API pública:
+//   ButtonState.loading(btn, text?)   → spinner + desabilita
+//   ButtonState.success(btn, text?)   → ✓ verde por 1.8s → reseta
+//   ButtonState.error(btn, text?)     → ✕ vermelho por 2s → reseta
+//   ButtonState.reset(btn)            → estado original
+//
+// Configuração via data-attributes no botão:
+//   data-btn-anim="spinner|progress|pulse|dots"  (padrão: spinner)
+//   data-loading-text="Salvando..."
+//   data-success-text="Salvo!"
+//   data-error-text="Erro!"
+//   data-timeout="15000"   → ms até abortar e mostrar erro (padrão: 30s)
+//
+// Integração automática com formulários:
+//   Qualquer <button type="submit"> dentro de <form> recebe os estados
+//   automaticamente, sem nenhuma linha de JS extra nas views.
+//
+const ButtonState = (() => {
+    const STATES   = ['loading', 'success', 'error'];
+    const TIMEOUT  = 30_000; // ms padrão de timeout
+
+    // Mapa de timers de timeout por botão (WeakMap = sem memory leak)
+    const _timers = new WeakMap();
+
+    /* ─── Estrutura interna ─────────────────────────────── */
+    function _save(btn) {
+        if (btn.dataset.bsOriginal) return; // já salvo
+        btn.dataset.bsOriginal = btn.innerHTML;
+        btn.dataset.bsDisabled = btn.disabled ? '1' : '0';
+    }
+
+    function _clearState(btn) {
+        STATES.forEach(s => btn.classList.remove(`btn--${s}`));
+    }
+
+    function _scaffold(btn) {
+        // Garante .btn-text e .btn-icon-state e .btn-progress-bar
+        if (!btn.querySelector('.btn-text')) {
+            const t = document.createElement('span');
+            t.className = 'btn-text';
+            t.innerHTML = btn.innerHTML;
+            btn.innerHTML = '';
+            btn.appendChild(t);
         }
-    } else {
-        btn.classList.remove('loading');
-        btn.disabled = false;
-        if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+        if (!btn.querySelector('.btn-icon-state')) {
+            const ic = document.createElement('span');
+            ic.className = 'btn-icon-state';
+            ic.setAttribute('aria-hidden', 'true');
+            btn.appendChild(ic);
+        }
+        if (!btn.querySelector('.btn-progress-bar')) {
+            const pb = document.createElement('span');
+            pb.className = 'btn-progress-bar';
+            pb.setAttribute('aria-hidden', 'true');
+            btn.appendChild(pb);
+        }
+    }
+
+    function _setIconForAnim(btn) {
+        const anim = btn.dataset.btnAnim || 'spinner';
+        const ic   = btn.querySelector('.btn-icon-state');
+        if (!ic) return;
+        ic.innerHTML = '';
+
+        if (anim === 'dots') {
+            // 3 barras verticais animadas
+            ic.innerHTML = '<i></i><i></i><i></i>';
+        }
+        // spinner / progress / pulse → CSS ::before cuida de tudo
+    }
+
+    /* ─── LOADING ───────────────────────────────────────── */
+    function loading(btn, text = null) {
+        if (!btn) return;
+        _save(btn);
+        _scaffold(btn);
+        _clearState(btn);
+
+        const txt = text || btn.dataset.loadingText || null;
+        const textEl = btn.querySelector('.btn-text');
+
+        if (txt && textEl) textEl.textContent = txt;
+
+        _setIconForAnim(btn);
+        btn.classList.add('btn--loading');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.setAttribute('aria-label', txt || 'Aguarde...');
+
+        // Timeout automático → mostra erro
+        const ms = parseInt(btn.dataset.timeout || TIMEOUT, 10);
+        const tid = setTimeout(() => {
+            error(btn, 'Tempo esgotado');
+            showToast('A operação demorou mais que o esperado. Tente novamente.', 'aviso');
+        }, ms);
+        _timers.set(btn, tid);
+    }
+
+    /* ─── SUCCESS ───────────────────────────────────────── */
+    function success(btn, text = null) {
+        if (!btn) return;
+        _clearTimer(btn);
+        _scaffold(btn);
+        _clearState(btn);
+
+        const txt = text || btn.dataset.successText || 'Feito!';
+        const textEl = btn.querySelector('.btn-text');
+        const ic     = btn.querySelector('.btn-icon-state');
+
+        if (textEl) textEl.textContent = txt;
+        if (ic) ic.innerHTML = ''; // CSS ::before renderiza ✓
+
+        btn.classList.add('btn--success');
+        btn.setAttribute('aria-label', txt);
+        btn.disabled = true;
+
+        setTimeout(() => reset(btn), 1800);
+    }
+
+    /* ─── ERROR ─────────────────────────────────────────── */
+    function error(btn, text = null) {
+        if (!btn) return;
+        _clearTimer(btn);
+        _scaffold(btn);
+        _clearState(btn);
+
+        const txt = text || btn.dataset.errorText || 'Erro!';
+        const textEl = btn.querySelector('.btn-text');
+        const ic     = btn.querySelector('.btn-icon-state');
+
+        if (textEl) textEl.textContent = txt;
+        if (ic) ic.innerHTML = '';
+
+        btn.classList.add('btn--error');
+        btn.setAttribute('aria-label', txt);
+        btn.disabled = true;
+
+        setTimeout(() => reset(btn), 2200);
+    }
+
+    /* ─── RESET ─────────────────────────────────────────── */
+    function reset(btn) {
+        if (!btn) return;
+        _clearTimer(btn);
+        _clearState(btn);
+        btn.disabled = (btn.dataset.bsDisabled === '1');
+        btn.removeAttribute('aria-busy');
+        btn.removeAttribute('aria-label');
+        if (btn.dataset.bsOriginal) {
+            btn.innerHTML = btn.dataset.bsOriginal;
+            delete btn.dataset.bsOriginal;
+            delete btn.dataset.bsDisabled;
+        }
+    }
+
+    function _clearTimer(btn) {
+        if (_timers.has(btn)) {
+            clearTimeout(_timers.get(btn));
+            _timers.delete(btn);
+        }
+    }
+
+    /* ─── Retrocompat com código legado ─────────────────── */
+    function legacyBtnLoading(btn, start = true) {
+        if (start) loading(btn);
+        else       reset(btn);
+    }
+
+    return { loading, success, error, reset, _legacyToggle: legacyBtnLoading };
+})();
+
+/* ── Shim de compatibilidade: btnLoading() ainda funciona ── */
+function btnLoading(btn, start = true) {
+    ButtonState._legacyToggle(btn, start);
+}
+
+/* ──────────────────────────────────────────────────────────
+   AUTO-BINDING DE FORMULÁRIOS
+   Intercepta todo <form> com botão submit e aplica os estados
+   automaticamente. Funciona com POST normal E fetch/AJAX.
+   ────────────────────────────────────────────────────────── */
+function _bindFormButtons() {
+    document.querySelectorAll('form').forEach(form => {
+        if (form.dataset.bsBound) return;
+        form.dataset.bsBound = '1';
+
+        form.addEventListener('submit', function (e) {
+            const btn = form.querySelector(
+                'button[type="submit"]:not([data-no-state]), ' +
+                'input[type="submit"]:not([data-no-state])'
+            );
+            if (!btn) return;
+
+            // Validação HTML5 inline (não bloqueia estado se inválido)
+            if (!form.checkValidity()) return;
+
+            // Inicia loading
+            ButtonState.loading(btn);
+
+            // Para formulários AJAX (fetch), o dev precisa chamar
+            // ButtonState.success/error manualmente.
+            // Para POST normal (page reload), o browser vai recarregar
+            // e o botão volta ao estado original.
+        });
+    });
+}
+
+// Escuta novos forms adicionados dinamicamente (modais, etc.)
+if (typeof MutationObserver !== 'undefined') {
+    const _formObserver = new MutationObserver(() => _bindFormButtons());
+    document.addEventListener('DOMContentLoaded', () => {
+        _formObserver.observe(document.body, { childList: true, subtree: true });
+        _bindFormButtons();
+    });
+}
+
+/* ──────────────────────────────────────────────────────────
+   WRAPPER FETCH COM ESTADO AUTOMÁTICO
+   Uso: fetchWithState(btn, url, options) → Promise
+   ────────────────────────────────────────────────────────── */
+async function fetchWithState(btn, url, options = {}) {
+    ButtonState.loading(btn);
+
+    const timeout = parseInt(btn?.dataset?.timeout || '30000', 10);
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const res = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(options.headers || {}),
+            },
+        });
+        clearTimeout(tid);
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json().catch(() => ({}));
+
+        if (data.success === false) {
+            ButtonState.error(btn, btn.dataset.errorText);
+            showToast(data.message || 'Erro na operação.', 'erro');
+            return null;
+        }
+
+        ButtonState.success(btn, btn.dataset.successText);
+        if (data.message) showToast(data.message, 'sucesso');
+        return data;
+
+    } catch (err) {
+        clearTimeout(tid);
+        if (err.name === 'AbortError') {
+            ButtonState.error(btn, 'Tempo esgotado');
+            showToast('A requisição expirou. Verifique sua conexão.', 'aviso');
+        } else {
+            ButtonState.error(btn, btn.dataset.errorText);
+            showToast('Erro de conexão. Tente novamente.', 'erro');
+        }
+        return null;
     }
 }
 
@@ -373,6 +622,9 @@ function validateForm(form) {
 // ============================================================
 document.addEventListener('DOMContentLoaded', function () {
 
+    // Vincula formulários ao sistema de estados
+    _bindFormButtons();
+
     // Auto-hide flash messages do servidor
     document.querySelectorAll('.mensagem[data-auto-hide]').forEach(el => {
         setTimeout(() => {
@@ -437,7 +689,9 @@ function fecharModal() {
 // ============================================================
 window.showToast         = showToast;
 window.showConfirm       = showConfirm;
-window.btnLoading        = btnLoading;
+window.btnLoading        = btnLoading;          // legado
+window.ButtonState       = ButtonState;         // novo sistema
+window.fetchWithState    = fetchWithState;      // fetch integrado
 window.setupAutocomplete = setupAutocomplete;
 window.fillFieldAnimated = fillFieldAnimated;
 window.validateForm      = validateForm;

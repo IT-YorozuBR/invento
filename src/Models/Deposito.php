@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Models;
@@ -37,17 +38,11 @@ class Deposito
 
     public function save(string $deposito, string $localizacao = ''): array
     {
-        if (!$this->validate($deposito)) {
-            return ['success' => false, 'message' => 'Nome do depósito inválido'];
-        }
-
         $stmt = $this->db->prepare(
             'INSERT INTO depositos_registrados (deposito, localizacao)
-             VALUES (?, ?)
-             ON DUPLICATE KEY UPDATE
-                localizacao     = COALESCE(?, localizacao),
-                total_registros = total_registros + 1,
-                data_ultimo_registro = NOW()'
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE
+            localizacao = COALESCE(?, localizacao)'
         );
         $stmt->bind_param('sss', $deposito, $localizacao, $localizacao);
 

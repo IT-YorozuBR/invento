@@ -27,6 +27,12 @@ class CadastrosController
         $message   = $this->consumeFlash();
         $csrfToken = Security::generateCsrfToken();
 
+        // Tipo da aba ativa: 'depositos' ou 'partnumbers'
+        $tipo = $_GET['tipo'] ?? 'depositos';
+        if (!in_array($tipo, ['depositos', 'partnumbers'])) {
+            $tipo = 'depositos';
+        }
+
         // Buscar todos os depósitos e partnumbers cadastrados
         $depositos   = $this->deposito->all();
         $partnumbers = $this->partnumber->all();
@@ -46,6 +52,7 @@ class CadastrosController
         }
 
         $acao = $_POST['acao'] ?? '';
+        $tipo = $_GET['tipo'] ?? 'depositos'; // Mantém a aba ativa após salvar
 
         if ($acao === 'cadastrar_deposito') {
             $this->cadastrarDeposito();
@@ -57,7 +64,7 @@ class CadastrosController
             $this->excluirPartnumber();
         }
 
-        header('Location: ?pagina=cadastros');
+        header('Location: ?pagina=cadastros&tipo=' . urlencode($tipo));
         exit;
     }
 
@@ -106,15 +113,28 @@ class CadastrosController
 
     private function excluirDeposito(): void
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        // Pega o nome do depósito enviado pelo formulário
+        $deposito = trim($_POST['deposito'] ?? '');
 
-        if ($id <= 0) {
-            $_SESSION['flash_error'] = 'ID inválido.';
-            return;
+        if (empty($deposito)) {
+            $_SESSION['flash_error'] = 'Nome do depósito inválido.';
+            header('Location: ?pagina=cadastros&tipo=depositos');
+            exit;
         }
 
-        // Aqui você pode adicionar lógica de exclusão se tiver o método no model
-        $_SESSION['flash_error'] = 'Funcionalidade de exclusão ainda não implementada.';
+        // Instancia o model e tenta excluir
+        $depositoModel = new \App\Models\Deposito();
+        $result = $depositoModel->delete($deposito);
+
+        if ($result['success']) {
+            $_SESSION['flash_success'] = $result['message'];
+        } else {
+            $_SESSION['flash_error'] = $result['message'];
+        }
+
+        // Redireciona de volta para a aba de depósitos
+        header('Location: ?pagina=cadastros&tipo=depositos');
+        exit;
     }
 
     private function excluirPartnumber(): void

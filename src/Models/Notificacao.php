@@ -45,7 +45,8 @@ class Notificacao
 
     /**
      * Retorna notificações criadas após determinado timestamp Unix.
-     * Também limpa registros com mais de 24 h (sem impacto perceptível).
+     * A limpeza de registros antigos foi movida para cleanup.php (cron job),
+     * eliminando lock contention durante o polling concorrente de admins.
      *
      * @param  int $inventarioId
      * @param  int $desde        Timestamp Unix (segundos)
@@ -53,13 +54,6 @@ class Notificacao
      */
     public function buscarDesde(int $inventarioId, int $desde): array
     {
-        // Limpeza silenciosa de registros antigos (> 24h) — custo mínimo
-        $this->db->query(
-            "DELETE FROM notificacoes_admin
-             WHERE criado_em < DATE_SUB(NOW(), INTERVAL 24 HOUR)
-             LIMIT 200"
-        );
-
         $desdeTs = date('Y-m-d H:i:s', $desde);
 
         $stmt = $this->db->prepare(
@@ -74,12 +68,8 @@ class Notificacao
         $stmt->execute();
         $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        // Contagem total (sem LIMIT) via SQL_CALC_FOUND_ROWS seria mais pesado;
-        // simplesmente contamos o array (já limitado a 20)
-        $total = count($items);
-
         return [
-            'total' => $total,
+            'total' => count($items),
             'items' => $items,
         ];
     }

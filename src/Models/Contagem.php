@@ -137,10 +137,8 @@ class Contagem
 
         // Se já existe contagem
         if ($existing) {
-            $contagemId = (int)$existing['id'];
-            $numContagens = (int)$existing['numero_contagens_realizadas'];
-            $podeNova = (bool)$existing['pode_nova_contagem'];
-            $finalizado = (bool)$existing['finalizado'];
+            $podeNova  = (bool) $existing['pode_nova_contagem'];
+            $finalizado = (bool) $existing['finalizado'];
 
             if ($finalizado) {
                 return ['success' => false, 'message' => 'Esta contagem já foi finalizada.'];
@@ -148,11 +146,11 @@ class Contagem
 
             // Se ADMIN LIBEROU próxima fase
             if ($podeNova) {
-                return $this->avancarParaProximaFase($contagemId, $quantidade, $usuarioId);
+                return $this->avancarParaProximaFase($existing, $quantidade, $usuarioId);
             }
 
-            // Se NÃO liberou, SOMA na fase atual
-            return $this->somarNaFaseAtual($contagemId, $numContagens, $quantidade);
+            // Se NÃO liberou, SOMA na fase atual — passa $existing para evitar findById() extra
+            return $this->somarNaFaseAtual($existing, $quantidade);
         }
 
         // Cria PRIMEIRA contagem (nova)
@@ -161,10 +159,12 @@ class Contagem
 
     /**
      * SOMA na fase atual (quando admin não liberou próxima fase)
+     * Recebe $row já carregado para evitar query duplicada.
      */
-    private function somarNaFaseAtual(int $contagemId, int $numContagens, float $quantidade): array
+    private function somarNaFaseAtual(array $row, float $quantidade): array
     {
-        $row = $this->findById($contagemId);
+        $contagemId   = (int) $row['id'];
+        $numContagens = (int) $row['numero_contagens_realizadas'];
 
         if ($numContagens === 1) {
             // SOMA na primária
@@ -178,14 +178,15 @@ class Contagem
 
             return [
                 'success' => true,
-                'message' => '✔ Somado à primeira contagem! Total: ' . number_format($nova, 2, ',', '.') . 
-                             ' un (Aguardando admin liberar segunda contagem)'
+                'fase'    => 1,
+                'message' => '✔ Somado à primeira contagem! Total: ' . number_format($nova, 2, ',', '.') .
+                             ' un (Aguardando admin liberar segunda contagem)',
             ];
 
         } elseif ($numContagens === 2) {
             // SOMA na secundária
             $nova = (float)$row['quantidade_secundaria'] + $quantidade;
-            
+
             $stmt = $this->db->prepare(
                 'UPDATE contagens SET quantidade_secundaria = ?, data_contagem_secundaria = NOW(), status = "secundaria" WHERE id = ?'
             );
@@ -194,7 +195,8 @@ class Contagem
 
             return [
                 'success' => true,
-                'message' => '✔ Somado à contagem! Total: ' . number_format($nova, 2, ',', '.') 
+                'fase'    => 2,
+                'message' => '✔ Somado à contagem! Total: ' . number_format($nova, 2, ',', '.'),
             ];
 
         } elseif ($numContagens === 3) {
@@ -206,16 +208,17 @@ class Contagem
 
     /**
      * Avança para próxima fase (quando admin liberou)
+     * Recebe $row já carregado para evitar query duplicada.
      */
-    private function avancarParaProximaFase(int $contagemId, float $quantidade, int $usuarioId): array
+    private function avancarParaProximaFase(array $row, float $quantidade, int $usuarioId): array
     {
-        $row = $this->findById($contagemId);
-        $numContagens = (int)$row['numero_contagens_realizadas'];
+        $contagemId   = (int) $row['id'];
+        $numContagens = (int) $row['numero_contagens_realizadas'];
 
         if ($numContagens === 1) {
             return $this->registrarSegundaFase($contagemId, $quantidade, $usuarioId);
         } elseif ($numContagens === 2) {
-            return $this->registrarTerceiraFase($contagemId, $quantidade, $usuarioId);
+            return $this->registrarTerceiraFase($row, $quantidade, $usuarioId);
         }
 
         return ['success' => false, 'message' => 'Número máximo de contagens atingido'];
@@ -238,7 +241,8 @@ class Contagem
         if ($stmt->execute()) {
             return [
                 'success' => true,
-                'message' => '✔ Contagem registrada! Quantidade: ' . number_format($quantidade, 2, ',', '.') 
+                'fase'    => 2,
+                'message' => '✔ Contagem registrada! Quantidade: ' . number_format($quantidade, 2, ',', '.'),
             ];
         }
 
@@ -247,10 +251,11 @@ class Contagem
 
     /**
      * Registra TERCEIRA FASE e verifica CONVERGÊNCIA
+     * Recebe $row já carregado para evitar query duplicada.
      */
-    private function registrarTerceiraFase(int $contagemId, float $quantidade, int $usuarioId): array
+    private function registrarTerceiraFase(array $row, float $quantidade, int $usuarioId): array
     {
-        $row = $this->findById($contagemId);
+        $contagemId = (int) $row['id'];
         
         $primaria   = (float)$row['quantidade_primaria'];
         $secundaria = (float)$row['quantidade_secundaria'];
@@ -309,11 +314,12 @@ class Contagem
 
         if ($stmt->execute()) {
             return [
-                'success' => true,
-                'message' => $mensagem,
-                'status' => $status,
+                'success'          => true,
+                'fase'             => 3,
+                'message'          => $mensagem,
+                'status'           => $status,
                 'quantidade_final' => $quantidadeFinal,
-                'convergente' => ($quantidadeFinal !== null)
+                'convergente'      => ($quantidadeFinal !== null),
             ];
         }
 
@@ -359,7 +365,8 @@ class Contagem
         if ($stmt->execute()) {
             return [
                 'success' => true,
-                'message' => '✔ Contagem registrada! Quantidade: ' . number_format($quantidade, 2, ',', '.') 
+                'fase'    => 1,
+                'message' => '✔ Contagem registrada! Quantidade: ' . number_format($quantidade, 2, ',', '.'),
             ];
         }
 
@@ -384,51 +391,60 @@ class Contagem
         $perPage = (int) ($_ENV['ITEMS_PER_PAGE'] ?? 20);
         $offset  = ($page - 1) * $perPage;
 
-        $sql    = "SELECT SQL_CALC_FOUND_ROWS
-                       c.*,
-                       u1.nome  AS usuario_nome,
-                       u2.nome  AS usuario_secundario_nome,
-                       u3.nome  AS usuario_terceiro_nome
-                   FROM contagens c
-                   JOIN  usuarios u1 ON c.usuario_id = u1.id
-                   LEFT JOIN usuarios u2 ON c.usuario_secundario_id = u2.id
-                   LEFT JOIN usuarios u3 ON c.usuario_terceiro_id = u3.id
-                   WHERE c.inventario_id = ?";
+        // ── Monta cláusulas de filtro compartilhadas entre COUNT e SELECT ──
+        $where  = 'c.inventario_id = ?';
         $params = [$inventarioId];
         $types  = 'i';
 
         if (!empty($filters['status'])) {
-            $sql    .= ' AND c.status = ?';
+            $where   .= ' AND c.status = ?';
             $params[] = $filters['status'];
-            $types  .= 's';
+            $types   .= 's';
         }
         if (!empty($filters['partnumber'])) {
-            $sql    .= ' AND c.partnumber LIKE ?';
+            $where   .= ' AND c.partnumber LIKE ?';
             $params[] = '%' . $filters['partnumber'] . '%';
-            $types  .= 's';
+            $types   .= 's';
         }
         if (!empty($filters['deposito'])) {
-            $sql    .= ' AND c.deposito LIKE ?';
+            $where   .= ' AND c.deposito LIKE ?';
             $params[] = '%' . $filters['deposito'] . '%';
-            $types  .= 's';
+            $types   .= 's';
         }
 
-        $sql    .= ' ORDER BY c.data_contagem_primaria DESC LIMIT ? OFFSET ?';
-        $params[] = $perPage;
-        $params[] = $offset;
-        $types  .= 'ii';
+        // ── COUNT separado (substitui SQL_CALC_FOUND_ROWS, deprecated no MySQL 8+) ──
+        $countStmt = $this->db->prepare("SELECT COUNT(*) AS total FROM contagens c WHERE {$where}");
+        $countStmt->bind_param($types, ...$params);
+        $countStmt->execute();
+        $total = (int) $countStmt->get_result()->fetch_assoc()['total'];
+
+        // ── SELECT paginado ──
+        $sql = "SELECT
+                       c.*,
+                       u1.nome AS usuario_nome,
+                       u2.nome AS usuario_secundario_nome,
+                       u3.nome AS usuario_terceiro_nome
+                   FROM contagens c
+                   JOIN  usuarios u1 ON c.usuario_id = u1.id
+                   LEFT JOIN usuarios u2 ON c.usuario_secundario_id = u2.id
+                   LEFT JOIN usuarios u3 ON c.usuario_terceiro_id = u3.id
+                   WHERE {$where}
+                   ORDER BY c.data_contagem_primaria DESC
+                   LIMIT ? OFFSET ?";
+
+        $dataParams = array_merge($params, [$perPage, $offset]);
+        $dataTypes  = $types . 'ii';
 
         $stmt = $this->db->prepare($sql);
-        $stmt->bind_param($types, ...$params);
+        $stmt->bind_param($dataTypes, ...$dataParams);
         $stmt->execute();
 
         $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-        $total = (int) $this->db->query('SELECT FOUND_ROWS() AS total')->fetch_assoc()['total'];
 
         return [
             'items'       => $items,
             'page'        => $page,
-            'total_pages' => (int) ceil($total / $perPage),
+            'total_pages' => $total > 0 ? (int) ceil($total / $perPage) : 1,
             'total'       => $total,
         ];
     }
@@ -563,19 +579,18 @@ class Contagem
             return ['success' => false, 'message' => 'Contagem não encontrada.'];
         }
 
-        $numContagens = (int)$row['numero_contagens_realizadas'];
-        $podeNova     = (bool)$row['pode_nova_contagem'];
-        $finalizado   = (bool)$row['finalizado'];
+        $podeNova   = (bool) $row['pode_nova_contagem'];
+        $finalizado = (bool) $row['finalizado'];
 
         if ($finalizado) {
             return ['success' => false, 'message' => 'Esta contagem já foi finalizada.'];
         }
 
         if ($podeNova) {
-            return $this->avancarParaProximaFase($contagemId, $quantidade, $usuarioId);
+            return $this->avancarParaProximaFase($row, $quantidade, $usuarioId);
         }
 
-        return $this->somarNaFaseAtual($contagemId, $numContagens, $quantidade);
+        return $this->somarNaFaseAtual($row, $quantidade);
     }
 
     public function registrarSegundaContagem(int $contagemId, float $quantidade, int $usuarioId): array

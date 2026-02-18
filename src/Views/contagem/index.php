@@ -1,5 +1,4 @@
 <?php
-
 /**
  * @var string   $message
  * @var string   $csrfToken
@@ -17,10 +16,10 @@ require SRC_PATH . '/Views/layout/header.php';
 
 $isAdmin  = Security::isAdmin();
 $msgClass = str_contains((string)$message, '✔')
-    || str_contains((string)$message, 'registrada')
-    || str_contains((string)$message, 'Somado')
-    || str_contains((string)$message, 'CONVERGENTE')
-    ? 'sucesso' : 'erro';
+         || str_contains((string)$message, 'registrada')
+         || str_contains((string)$message, 'Somado')
+         || str_contains((string)$message, 'CONVERGENTE')
+         ? 'sucesso' : 'erro';
 ?>
 
 <?php if (!empty($message)): ?>
@@ -40,7 +39,7 @@ $msgClass = str_contains((string)$message, '✔')
         <span style="font-size:13px;color:var(--gray);font-weight:400;margin-left:auto;display:flex;align-items:center;gap:10px;">
             <span>Inventário: <strong><?= htmlspecialchars($inventarioAtivo['codigo']) ?></strong></span>
             <button type="button" onclick="iniciarScannerQR()" class="btn btn-sm btn-secondary"
-                title="Ler QR Code com a câmera">
+                    title="Ler QR Code com a câmera">
                 <i class="fas fa-qrcode"></i> Scan QR
             </button>
         </span>
@@ -57,7 +56,7 @@ $msgClass = str_contains((string)$message, '✔')
                 <label for="depositoInput"><i class="fas fa-warehouse"></i> Depósito</label>
                 <div class="autocomplete-container">
                     <input type="text" id="depositoInput" name="deposito" required
-                        placeholder="Digite ou selecione o depósito" autocomplete="off">
+                           placeholder="Digite ou selecione o depósito" autocomplete="off">
                     <div id="depositoDropdown" class="autocomplete-dropdown" style="display:none;"></div>
                 </div>
                 <div id="novoDepositoDiv" style="display:none;margin-top:8px;">
@@ -70,7 +69,7 @@ $msgClass = str_contains((string)$message, '✔')
                 <label for="partnumberInput"><i class="fas fa-barcode"></i> Part Number</label>
                 <div class="autocomplete-container">
                     <input type="text" id="partnumberInput" name="partnumber" required
-                        placeholder="Digite ou selecione o part number" autocomplete="off">
+                           placeholder="Digite ou selecione o part number" autocomplete="off">
                     <div id="pnDropdown" class="autocomplete-dropdown" style="display:none;"></div>
                 </div>
                 <!-- Aviso PN encerrado -->
@@ -92,7 +91,7 @@ $msgClass = str_contains((string)$message, '✔')
             <div class="form-group">
                 <label for="quantidade"><i class="fas fa-sort-numeric-up"></i> Quantidade</label>
                 <input type="number" id="quantidade" name="quantidade" required
-                    min="0.0001" step="0.0001" placeholder="0">
+                       min="0.0001" step="0.0001" placeholder="0">
             </div>
 
             <!-- Observações -->
@@ -102,7 +101,7 @@ $msgClass = str_contains((string)$message, '✔')
                     <span style="font-weight:400;color:var(--gray);text-transform:none;">(opcional)</span>
                 </label>
                 <input type="text" id="observacoes" name="observacoes"
-                    placeholder="Observações sobre esta contagem">
+                       placeholder="Observações sobre esta contagem">
             </div>
         </div>
 
@@ -151,17 +150,17 @@ $msgClass = str_contains((string)$message, '✔')
     <!-- Filtros -->
     <div class="form-container" style="padding:16px;">
         <form method="GET" action="?pagina=contagem"
-            style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+              style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
             <input type="hidden" name="pagina" value="contagem">
             <div style="flex:1;min-width:200px;">
                 <label style="font-size:11px;margin-bottom:4px;display:block;text-transform:uppercase;letter-spacing:.4px;">Part Number</label>
                 <input type="text" name="partnumber"
-                    value="<?= htmlspecialchars($_GET['partnumber'] ?? '') ?>" placeholder="Filtrar...">
+                       value="<?= htmlspecialchars($_GET['partnumber'] ?? '') ?>" placeholder="Filtrar...">
             </div>
             <div style="flex:1;min-width:200px;">
                 <label style="font-size:11px;margin-bottom:4px;display:block;text-transform:uppercase;letter-spacing:.4px;">Depósito</label>
                 <input type="text" name="deposito"
-                    value="<?= htmlspecialchars($_GET['deposito'] ?? '') ?>" placeholder="Filtrar...">
+                       value="<?= htmlspecialchars($_GET['deposito'] ?? '') ?>" placeholder="Filtrar...">
             </div>
             <div style="display:flex;gap:8px;align-items:flex-end;">
                 <button type="submit" class="btn btn-primary btn-sm">
@@ -192,63 +191,76 @@ $msgClass = str_contains((string)$message, '✔')
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($pagination['items'])): ?>
-                    <tr>
-                        <td colspan="10" style="text-align:center;padding:32px;color:var(--gray);">
-                            <i class="fas fa-inbox fa-2x" style="display:block;margin-bottom:8px;opacity:.4;"></i>
-                            Nenhuma contagem encontrada.
-                        </td>
-                    </tr>
-                <?php else: ?>
-                    <?php
-                    // Declarada UMA VEZ fora do foreach para evitar "Cannot redeclare"
-                    function fmtQtd(?float $val, ?float $compare = null): string
-                    {
-                        if ($val === null) return '<span style="color:#cbd5e1">—</span>';
-                        $num = number_format($val, 2, ',', '.');
-                        if ($compare !== null) {
-                            if (abs($val - $compare) < 0.0001) {
-                                return "<span class='qtd-match'>{$num}<span class='qtd-icon'>✓</span></span>";
-                            } else {
-                                return "<span class='qtd-diff'>{$num}<span class='qtd-icon'>≠</span></span>";
-                            }
+            <?php if (empty($pagination['items'])): ?>
+                <tr>
+                    <td colspan="10" style="text-align:center;padding:32px;color:var(--gray);">
+                        <i class="fas fa-inbox fa-2x" style="display:block;margin-bottom:8px;opacity:.4;"></i>
+                        Nenhuma contagem encontrada.
+                    </td>
+                </tr>
+            <?php else: ?>
+                <?php
+                // Declarada UMA VEZ fora do foreach para evitar "Cannot redeclare"
+                function fmtQtd(?float $val, ?float $compare = null): string {
+                    if ($val === null) return '<span style="color:#cbd5e1">—</span>';
+                    $num = number_format($val, 2, ',', '.');
+                    if ($compare !== null) {
+                        if (abs($val - $compare) < 0.0001) {
+                            return "<span class='qtd-match'>{$num}<span class='qtd-icon'>✓</span></span>";
+                        } else {
+                            return "<span class='qtd-diff'>{$num}<span class='qtd-icon'>≠</span></span>";
                         }
-                        return "<span class='qtd-cell'>{$num}</span>";
                     }
-                    ?>
-                    <?php foreach ($pagination['items'] as $c): ?>
-                        <?php
-                        $finalizado   = (bool)($c['finalizado'] ?? false);
-                        $numContagens = (int)($c['numero_contagens_realizadas'] ?? 1);
-                        $status       = $c['status'] ?? 'primaria';
-                        $qtd1         = $c['quantidade_primaria']   !== null ? (float)$c['quantidade_primaria']   : null;
-                        $qtd2         = $c['quantidade_secundaria'] !== null ? (float)$c['quantidade_secundaria'] : null;
-                        $qtd3         = $c['quantidade_terceira']   !== null ? (float)$c['quantidade_terceira']   : null;
-                        $qtdFinal     = $c['quantidade_final']      !== null ? (float)$c['quantidade_final']      : null;
+                    return "<span class='qtd-cell'>{$num}</span>";
+                }
+                ?>
+                <?php foreach ($pagination['items'] as $c): ?>
+                <?php
+                    $finalizado   = (bool)($c['finalizado'] ?? false);
+                    $numContagens = (int)($c['numero_contagens_realizadas'] ?? 1);
+                    $status       = $c['status'] ?? 'primaria';
+                    $qtd1         = $c['quantidade_primaria']   !== null ? (float)$c['quantidade_primaria']   : null;
+                    $qtd2         = $c['quantidade_secundaria'] !== null ? (float)$c['quantidade_secundaria'] : null;
+                    $qtd3         = $c['quantidade_terceira']   !== null ? (float)$c['quantidade_terceira']   : null;
+                    $qtdFinal     = $c['quantidade_final']      !== null ? (float)$c['quantidade_final']      : null;
 
-                        // Detectar convergência entre 1ª e 2ª
-                        $match12 = ($qtd2 !== null) && (abs($qtd1 - $qtd2) < 0.0001);
+                    // Detectar convergência entre 1ª e 2ª
+                    $match12 = ($qtd2 !== null) && (abs($qtd1 - $qtd2) < 0.0001);
 
-                        // Classe da linha
-                        if ($finalizado) {
-                            $trClass = 'linha-encerrado';
-                        } elseif ($status === 'divergente') {
-                            $trClass = 'linha-divergente';
-                        } elseif ($status === 'concluida') {
-                            $trClass = 'linha-match';
-                        } elseif ($qtd2 !== null && $match12) {
-                            $trClass = 'linha-match';
-                        } elseif ($qtd2 !== null && !$match12) {
-                            $trClass = 'linha-diff';
+                    // Classe da linha
+                    if ($finalizado) {
+                        $trClass = 'linha-encerrado';
+                    } elseif ($status === 'divergente') {
+                        $trClass = 'linha-divergente';
+                    } elseif ($status === 'concluida') {
+                        $trClass = 'linha-match';
+                    } elseif ($qtd2 !== null && $match12) {
+                        $trClass = 'linha-match';
+                    } elseif ($qtd2 !== null && !$match12) {
+                        $trClass = 'linha-diff';
+                    } else {
+                        $trClass = 'linha-primaria';
+                    }
+
+                    // Badge status
+                    if ($finalizado) {
+                        $badge = '<span class="status-badge status-encerrado"><i class="fas fa-lock"></i> Encerrado</span>';
+                    } else {
+                        // Verificar se há nova contagem liberada (pode_nova_contagem = 1)
+                        $podeNova = (bool)($c['pode_nova_contagem'] ?? false);
+                        
+                        if ($podeNova) {
+                            // Acabou de liberar: mostrar qual fase está aguardando
+                            if ($numContagens === 1) {
+                                $badge = '<span class="status-badge status-secundaria"><i class="fas fa-unlock"></i> Aguardando 2ª contagem</span>';
+                            } elseif ($numContagens === 2) {
+                                $badge = '<span class="status-badge status-secundaria"><i class="fas fa-unlock"></i> Aguardando 3ª contagem</span>';
+                            } else {
+                                $badge = '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>';
+                            }
                         } else {
-                            $trClass = 'linha-primaria';
-                        }
-
-                        // Badge status
-                        if ($finalizado) {
-                            $badge = '<span class="status-badge status-encerrado"><i class="fas fa-lock"></i> Encerrado</span>';
-                        } else {
-                            $badge = match ($status) {
+                            // Não liberou ainda: badge normal por status
+                            $badge = match($status) {
                                 'primaria'   => '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>',
                                 'secundaria' => '<span class="status-badge status-secundaria"><i class="fas fa-layer-group"></i> 2ª Contagem</span>',
                                 'concluida'  => '<span class="status-badge status-concluida"><i class="fas fa-check-circle"></i> Concluída</span>',
@@ -256,49 +268,58 @@ $msgClass = str_contains((string)$message, '✔')
                                 default      => '<span class="status-badge status-encerrado">' . htmlspecialchars($status) . '</span>',
                             };
                         }
+                    }
+                ?>
+                <tr class="<?= $trClass ?>" data-contagem-id="<?= (int)$c['id'] ?>">
+                    <td><strong><?= htmlspecialchars($c['deposito']) ?></strong></td>
+                    <td>
+                        <strong><?= htmlspecialchars($c['partnumber']) ?></strong>
+                        <?php
+                        // Badge ao lado do PN quando está aguardando nova contagem
+                        $podeNova = (bool)($c['pode_nova_contagem'] ?? false);
+                        if ($podeNova && !$finalizado) {
+                            if ($numContagens === 1) {
+                                echo '<br><small style="color:#1e40af;background:#dbeafe;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block;margin-top:3px;">';
+                                echo '<i class="fas fa-arrow-right"></i> Liberada 2ª contagem';
+                                echo '</small>';
+                            } elseif ($numContagens === 2) {
+                                echo '<br><small style="color:#1e40af;background:#dbeafe;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block;margin-top:3px;">';
+                                echo '<i class="fas fa-arrow-right"></i> Liberada 3ª contagem';
+                                echo '</small>';
+                            }
+                        }
                         ?>
-                        <tr class="<?= $trClass ?>">
-                            <td><strong><?= htmlspecialchars($c['deposito']) ?></strong></td>
-                            <td>
-                                <strong><?= htmlspecialchars($c['partnumber']) ?></strong>
-                                <?php if (!$finalizado): ?>
-                                    <?php if ($numContagens == 2): ?>
-                                        <span class="fase-badge fase-badge-2">2ª contagem</span>
-                                    <?php elseif ($numContagens == 3): ?>
-                                        <span class="fase-badge fase-badge-3">3ª contagem</span>
-                                    <?php endif; ?>
-                                <?php endif; ?>
-                                <?php if ($c['lote']): ?>
-                                    <br><small style="color:var(--gray);font-size:11px;">
-                                        <i class="fas fa-tag"></i> <?= htmlspecialchars($c['lote']) ?>
-                                    </small>
-                                <?php endif; ?>
-                            </td>
-                            <td class="qtd-cell"><?= fmtQtd($qtd1) ?></td>
-                            <td class="qtd-cell"><?= fmtQtd($qtd2, $qtd1) ?></td>
-                            <td class="qtd-cell"><?= fmtQtd($qtd3, $qtd2 ?? $qtd1) ?></td>
-                            <td>
-                                <?php if ($qtdFinal !== null): ?>
-                                    <strong style="color:var(--success);font-size:15px;">
-                                        <?= number_format($qtdFinal, 2, ',', '.') ?>
-                                    </strong>
-                                <?php else: ?>
-                                    <span style="color:#cbd5e1">—</span>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= $badge ?></td>
-                            <td style="font-size:13px;"><?= htmlspecialchars($c['usuario_nome'] ?? '—') ?></td>
-                            <td style="font-size:12px;white-space:nowrap;color:var(--gray);">
-                                <?= $c['data_contagem_primaria']
-                                    ? date('d/m/y H:i', strtotime($c['data_contagem_primaria']))
-                                    : '—' ?>
-                            </td>
-                            <td>
-                                <?php if ($finalizado): ?>
-                                    <span style="color:var(--gray);font-size:12px;"><i class="fas fa-lock"></i></span>
-                                <?php else: ?>
-                                    <button class="btn-acao" id="btnAcao_<?= $c['id'] ?>"
-                                        onclick="abrirAcaoModal(
+                        <?php if ($c['lote']): ?>
+                            <br><small style="color:var(--gray);font-size:11px;">
+                                <i class="fas fa-tag"></i> <?= htmlspecialchars($c['lote']) ?>
+                            </small>
+                        <?php endif; ?>
+                    </td>
+                    <td class="qtd-cell"><?= fmtQtd($qtd1) ?></td>
+                    <td class="qtd-cell"><?= fmtQtd($qtd2, $qtd1) ?></td>
+                    <td class="qtd-cell"><?= fmtQtd($qtd3, $qtd2 ?? $qtd1) ?></td>
+                    <td>
+                        <?php if ($qtdFinal !== null): ?>
+                            <strong style="color:var(--success);font-size:15px;">
+                                <?= number_format($qtdFinal, 2, ',', '.') ?>
+                            </strong>
+                        <?php else: ?>
+                            <span style="color:#cbd5e1">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><?= $badge ?></td>
+                    <td style="font-size:13px;"><?= htmlspecialchars($c['usuario_nome'] ?? '—') ?></td>
+                    <td style="font-size:12px;white-space:nowrap;color:var(--gray);">
+                        <?= $c['data_contagem_primaria']
+                            ? date('d/m/y H:i', strtotime($c['data_contagem_primaria']))
+                            : '—' ?>
+                    </td>
+                    <td>
+                        <?php if ($finalizado): ?>
+                            <span style="color:var(--gray);font-size:12px;"><i class="fas fa-lock"></i></span>
+                        <?php else: ?>
+                            <button class="btn-acao" id="btnAcao_<?= $c['id'] ?>"
+                                onclick="abrirAcaoModal(
                                     <?= (int)$c['id'] ?>,
                                     '<?= htmlspecialchars(addslashes($c['partnumber'])) ?>',
                                     '<?= htmlspecialchars(addslashes($c['deposito'])) ?>',
@@ -306,13 +327,13 @@ $msgClass = str_contains((string)$message, '✔')
                                     <?= $numContagens ?>,
                                     <?= $isAdmin ? 'true' : 'false' ?>
                                 )">
-                                        <i class="fas fa-ellipsis-h"></i> Ação
-                                    </button>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
+                                <i class="fas fa-ellipsis-h"></i> Ação
+                            </button>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -382,301 +403,401 @@ $msgClass = str_contains((string)$message, '✔')
 </div>
 
 <script>
-    // ============================================================
-    // VARIÁVEIS INJETADAS PELO PHP
-    // ============================================================
-    const csrfToken = <?= json_encode($csrfToken) ?>;
-    const inventarioId = <?= (int)$inventarioAtivo['id'] ?>;
-    const isAdminUser = <?= $isAdmin ? 'true' : 'false' ?>;
-    const depositos = <?= json_encode(array_column($depositos, 'deposito')) ?>;
-    const partnumbers = <?= json_encode(array_column($partnumbers, 'partnumber')) ?>;
+// ============================================================
+// VARIÁVEIS INJETADAS PELO PHP
+// ============================================================
+const csrfToken   = <?= json_encode($csrfToken) ?>;
+const inventarioId = <?= (int)$inventarioAtivo['id'] ?>;
+const isAdminUser  = <?= $isAdmin ? 'true' : 'false' ?>;
+const depositos   = <?= json_encode(array_column($depositos, 'deposito')) ?>;
+const partnumbers = <?= json_encode(array_column($partnumbers, 'partnumber')) ?>;
 
-    // ============================================================
-    // AUTOCOMPLETE
-    // ============================================================
-    document.addEventListener('DOMContentLoaded', function() {
-        setupAutocomplete('depositoInput', 'depositoDropdown', depositos, 'novoDepositoDiv');
-        setupAutocomplete('partnumberInput', 'pnDropdown', partnumbers, 'novoPnDiv');
+// ============================================================
+// AUTOCOMPLETE
+// ============================================================
+document.addEventListener('DOMContentLoaded', function () {
+    setupAutocomplete('depositoInput',  'depositoDropdown', depositos,   'novoDepositoDiv');
+    setupAutocomplete('partnumberInput','pnDropdown',        partnumbers, 'novoPnDiv');
 
-        const pnInput = document.getElementById('partnumberInput');
-        const depInput = document.getElementById('depositoInput');
+    const pnInput  = document.getElementById('partnumberInput');
+    const depInput = document.getElementById('depositoInput');
 
-        if (pnInput) {
-            pnInput.addEventListener('blur', verificarStatusPN);
-            pnInput.addEventListener('input', () => {
-                esconderAvisos();
-                _cache = {};
-            });
-        }
-        if (depInput) {
-            depInput.addEventListener('blur', verificarStatusPN);
-        }
+    if (pnInput) {
+        pnInput.addEventListener('blur',  verificarStatusPN);
+        pnInput.addEventListener('input', () => { esconderAvisos(); _cache = {}; });
+    }
+    if (depInput) {
+        depInput.addEventListener('blur', verificarStatusPN);
+    }
 
-        // Submit com loading
-        const form = document.getElementById('formContagem');
-        if (form) {
-            form.addEventListener('submit', async function(e) {
-                const pn = pnInput?.value.trim();
-                const dep = depInput?.value.trim();
+    // Submit com loading
+    const form = document.getElementById('formContagem');
+    if (form) {
+        form.addEventListener('submit', async function (e) {
+            const pn  = pnInput?.value.trim();
+            const dep = depInput?.value.trim();
 
-                if (pn && dep) {
-                    const key = pn + '|' + dep;
-                    let dados = _cache[key];
+            if (pn && dep) {
+                const key  = pn + '|' + dep;
+                let dados  = _cache[key];
 
-                    if (!dados) {
-                        e.preventDefault();
-                        const fd = new FormData();
-                        fd.append('partnumber', pn);
-                        fd.append('deposito', dep);
-                        try {
-                            const r = await fetch('?pagina=ajax&acao=verificar_finalizado', {
-                                method: 'POST',
-                                body: fd
-                            });
-                            dados = await r.json();
-                            _cache[key] = dados;
-                        } catch {
-                            dados = {
-                                finalizado: false
-                            };
-                        }
+                if (!dados) {
+                    e.preventDefault();
+                    const fd = new FormData();
+                    fd.append('partnumber', pn);
+                    fd.append('deposito', dep);
+                    try {
+                        const r = await fetch('?pagina=ajax&acao=verificar_finalizado', { method:'POST', body:fd });
+                        dados = await r.json();
+                        _cache[key] = dados;
+                    } catch { dados = { finalizado: false }; }
 
-                        if (dados.finalizado) {
-                            mostrarErroPNEncerrado();
-                            return;
-                        }
-                        form.submit();
-                        return;
-                    }
                     if (dados.finalizado) {
-                        e.preventDefault();
                         mostrarErroPNEncerrado();
                         return;
                     }
+                    form.submit();
+                    return;
                 }
+                if (dados.finalizado) {
+                    e.preventDefault();
+                    mostrarErroPNEncerrado();
+                    return;
+                }
+            }
 
-                const btn = document.getElementById('btnRegistrar');
-                if (btn) btnLoading(btn, true);
-            });
+            const btn = document.getElementById('btnRegistrar');
+            if (btn) btnLoading(btn, true);
+        });
+    }
+});
+
+// ============================================================
+// VALIDAÇÃO PN + DEPÓSITO
+// ============================================================
+let _cache = {};
+
+async function verificarStatusPN() {
+    const pn  = document.getElementById('partnumberInput')?.value.trim();
+    const dep = document.getElementById('depositoInput')?.value.trim();
+    esconderAvisos();
+    if (!pn || !dep) return;
+
+    const key = pn + '|' + dep;
+    if (!_cache[key]) {
+        try {
+            const fd = new FormData();
+            fd.append('partnumber', pn);
+            fd.append('deposito', dep);
+            const r = await fetch('?pagina=ajax&acao=verificar_finalizado', { method:'POST', body:fd });
+            _cache[key] = await r.json();
+        } catch { return; }
+    }
+
+    const dados = _cache[key];
+    if (dados.finalizado) {
+        mostrarErroPNEncerrado();
+        document.getElementById('partnumberInput').value = '';
+        document.getElementById('partnumberInput').focus();
+        delete _cache[key];
+        return;
+    }
+
+    if (dados.existe && dados.status) {
+        mostrarAvisoStatus(dados);
+    }
+}
+
+function mostrarErroPNEncerrado() {
+    const el = document.getElementById('erroPartNumberEncerrado');
+    if (el) el.style.display = 'flex';
+}
+
+function mostrarAvisoStatus(dados) {
+    const el = document.getElementById('avisoStatusContagem');
+    if (!el) return;
+
+    const labels = { primaria: '1ª contagem registrada', secundaria: '2ª contagem registrada',
+                     concluida: 'Contagem concluída', divergente: 'Aguardando revisão' };
+    const label  = labels[dados.status] || dados.status;
+    const podeNova = dados.pode_nova;
+
+    let msg = `<i class="fas fa-info-circle"></i> ${label}`;
+    if (podeNova) {
+        msg = `<i class="fas fa-unlock"></i> <strong>Nova contagem liberada!</strong> Registre a quantidade — será somada à fase atual.`;
+        el.style.borderColor = 'var(--success)';
+        el.style.background  = '#f0fdf4';
+        el.style.color       = '#166534';
+    }
+    el.innerHTML = msg;
+    el.style.display = 'block';
+}
+
+function esconderAvisos() {
+    document.getElementById('erroPartNumberEncerrado')?.style && (document.getElementById('erroPartNumberEncerrado').style.display = 'none');
+    document.getElementById('avisoStatusContagem')?.style     && (document.getElementById('avisoStatusContagem').style.display = 'none');
+}
+
+// ============================================================
+// MODAL DE AÇÕES
+// ============================================================
+let acaoAtual = null;
+
+function abrirAcaoModal(id, partnumber, deposito, invId, numContagens, isAdmin) {
+    acaoAtual = { id, partnumber, deposito, invId, numContagens, isAdmin };
+
+    const modal   = document.getElementById('acaoModal');
+    const content = document.getElementById('modalContent');
+    const btnNova = document.getElementById('btnNovaContagem');
+    const sub     = document.getElementById('modalSubtitle');
+
+    if (sub) sub.textContent = partnumber + ' · ' + deposito;
+
+    if (btnNova) {
+        if (!isAdmin || numContagens >= 3) {
+            btnNova.style.display = 'none';
+        } else {
+            btnNova.style.display = 'flex';
+            const proxima = numContagens + 1;
+            btnNova.querySelector('.btn-text').textContent = `Liberar ${proxima}ª Contagem`;
         }
+    }
+
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => {
+        modal.style.opacity  = '1';
+        content.style.transform = 'scale(1)';
+    });
+}
+
+function fecharAcaoModal() {
+    const modal   = document.getElementById('acaoModal');
+    const content = document.getElementById('modalContent');
+    modal.style.opacity = '0';
+    content.style.transform = 'scale(0.9)';
+    setTimeout(() => { modal.style.display = 'none'; acaoAtual = null; }, 280);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const btnNova     = document.getElementById('btnNovaContagem');
+    const btnFinalizar = document.getElementById('btnFinalizar');
+    const modal       = document.getElementById('acaoModal');
+
+    btnNova?.addEventListener('click', function () {
+        if (!acaoAtual) return;
+        const id = acaoAtual.id;
+        const n  = acaoAtual.numContagens;
+        fecharAcaoModal();
+        if (n === 1)      executarLiberar(id, 2);
+        else if (n === 2) executarLiberar(id, 3);
+        else showToast('Número máximo de contagens já atingido.', 'aviso');
     });
 
-    // ============================================================
-    // VALIDAÇÃO PN + DEPÓSITO
-    // ============================================================
-    let _cache = {};
+    btnFinalizar?.addEventListener('click', function () {
+        if (!acaoAtual) return;
+        const { id, partnumber } = acaoAtual;
+        fecharAcaoModal();
+        executarEncerrar(id, partnumber);
+    });
 
-    async function verificarStatusPN() {
-        const pn = document.getElementById('partnumberInput')?.value.trim();
-        const dep = document.getElementById('depositoInput')?.value.trim();
-        esconderAvisos();
-        if (!pn || !dep) return;
+    modal?.addEventListener('click', e => { if (e.target === modal) fecharAcaoModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharAcaoModal(); });
+});
 
-        const key = pn + '|' + dep;
-        if (!_cache[key]) {
-            try {
-                const fd = new FormData();
-                fd.append('partnumber', pn);
-                fd.append('deposito', dep);
-                const r = await fetch('?pagina=ajax&acao=verificar_finalizado', {
-                    method: 'POST',
-                    body: fd
-                });
-                _cache[key] = await r.json();
-            } catch {
-                return;
-            }
-        }
+// ============================================================
+// ATUALIZAÇÃO DINÂMICA DA LINHA APÓS LIBERAÇÃO
+// ============================================================
+function atualizarLinhaTabela(contagemId, dados) {
+    const tr = document.querySelector(`tr[data-contagem-id="${contagemId}"]`);
+    if (!tr) {
+        console.warn('Linha não encontrada para ID:', contagemId);
+        // Fallback: reload após 1.5s
+        setTimeout(() => location.reload(), 1500);
+        return;
+    }
 
-        const dados = _cache[key];
+    const numContagens = dados.numero_contagens || 1;
+    const podeNova = dados.pode_nova_contagem || false;
+    const status = dados.status || 'primaria';
+
+    // 1. Atualizar classe da linha (cores de convergência)
+    tr.className = ''; // Limpa classes anteriores
+    if (dados.finalizado) {
+        tr.classList.add('linha-encerrado');
+    } else if (podeNova) {
+        // Acabou de liberar: ainda não registrou a próxima
+        tr.classList.add('linha-primaria');
+    } else {
+        // Mapeamento status → classe
+        const classMap = {
+            'primaria':   'linha-primaria',
+            'secundaria': 'linha-primaria', // Aguardando 2ª
+            'concluida':  'linha-match',
+            'divergente': 'linha-divergente'
+        };
+        tr.classList.add(classMap[status] || 'linha-primaria');
+    }
+
+    // 2. Atualizar badge de status
+    const tdStatus = tr.querySelector('td:nth-child(7)'); // 7ª coluna = Status
+    if (tdStatus) {
+        let badgeHtml = '';
         if (dados.finalizado) {
-            mostrarErroPNEncerrado();
-            document.getElementById('partnumberInput').value = '';
-            document.getElementById('partnumberInput').focus();
-            delete _cache[key];
-            return;
-        }
-
-        if (dados.existe && dados.status) {
-            mostrarAvisoStatus(dados);
-        }
-    }
-
-    function mostrarErroPNEncerrado() {
-        const el = document.getElementById('erroPartNumberEncerrado');
-        if (el) el.style.display = 'flex';
-    }
-
-    function mostrarAvisoStatus(dados) {
-        const el = document.getElementById('avisoStatusContagem');
-        if (!el) return;
-
-        const labels = {
-            primaria: '1ª contagem registrada',
-            secundaria: '2ª contagem registrada',
-            concluida: 'Contagem concluída',
-            divergente: 'Aguardando revisão'
-        };
-        const label = labels[dados.status] || dados.status;
-        const podeNova = dados.pode_nova;
-
-        let msg = `<i class="fas fa-info-circle"></i> ${label}`;
-        if (podeNova) {
-            msg = `<i class="fas fa-unlock"></i> <strong>Nova contagem liberada!</strong> Registre a quantidade — será somada à fase atual.`;
-            el.style.borderColor = 'var(--success)';
-            el.style.background = '#f0fdf4';
-            el.style.color = '#166534';
-        }
-        el.innerHTML = msg;
-        el.style.display = 'block';
-    }
-
-    function esconderAvisos() {
-        document.getElementById('erroPartNumberEncerrado')?.style && (document.getElementById('erroPartNumberEncerrado').style.display = 'none');
-        document.getElementById('avisoStatusContagem')?.style && (document.getElementById('avisoStatusContagem').style.display = 'none');
-    }
-
-    // ============================================================
-    // MODAL DE AÇÕES
-    // ============================================================
-    let acaoAtual = null;
-
-    function abrirAcaoModal(id, partnumber, deposito, invId, numContagens, isAdmin) {
-        acaoAtual = {
-            id,
-            partnumber,
-            deposito,
-            invId,
-            numContagens,
-            isAdmin
-        };
-
-        const modal = document.getElementById('acaoModal');
-        const content = document.getElementById('modalContent');
-        const btnNova = document.getElementById('btnNovaContagem');
-        const sub = document.getElementById('modalSubtitle');
-
-        if (sub) sub.textContent = partnumber + ' · ' + deposito;
-
-        if (btnNova) {
-            if (!isAdmin || numContagens >= 3) {
-                btnNova.style.display = 'none';
+            badgeHtml = '<span class="status-badge status-encerrado"><i class="fas fa-lock"></i> Encerrado</span>';
+        } else if (podeNova) {
+            // Acabou de liberar: especificar qual fase está aguardando
+            if (numContagens === 1) {
+                badgeHtml = '<span class="status-badge status-secundaria"><i class="fas fa-unlock"></i> Aguardando 2ª contagem</span>';
+            } else if (numContagens === 2) {
+                badgeHtml = '<span class="status-badge status-secundaria"><i class="fas fa-unlock"></i> Aguardando 3ª contagem</span>';
             } else {
-                btnNova.style.display = 'flex';
-                const proxima = numContagens + 1;
-                btnNova.querySelector('.btn-text').textContent = `Liberar ${proxima}ª Contagem`;
+                badgeHtml = '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>';
             }
+        } else {
+            const badgeMap = {
+                'primaria':   '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>',
+                'secundaria': '<span class="status-badge status-secundaria"><i class="fas fa-layer-group"></i> 2ª Contagem</span>',
+                'concluida':  '<span class="status-badge status-concluida"><i class="fas fa-check-circle"></i> Concluída</span>',
+                'divergente': '<span class="status-badge status-divergente"><i class="fas fa-exclamation-triangle"></i> Divergente</span>',
+            };
+            badgeHtml = badgeMap[status] || badgeMap.primaria;
         }
-
-        modal.style.display = 'flex';
-        requestAnimationFrame(() => {
-            modal.style.opacity = '1';
-            content.style.transform = 'scale(1)';
-        });
+        tdStatus.innerHTML = badgeHtml;
     }
 
-    function fecharAcaoModal() {
-        const modal = document.getElementById('acaoModal');
-        const content = document.getElementById('modalContent');
-        modal.style.opacity = '0';
-        content.style.transform = 'scale(0.9)';
-        setTimeout(() => {
-            modal.style.display = 'none';
-            acaoAtual = null;
-        }, 280);
+    // 3. Adicionar badge ao lado do Part Number quando liberada
+    const tdPN = tr.querySelector('td:nth-child(2)'); // 2ª coluna = Part Number
+    if (tdPN && podeNova && !dados.finalizado) {
+        const strong = tdPN.querySelector('strong');
+        if (strong) {
+            // Remove badge anterior se existir
+            const oldBadge = tdPN.querySelector('.badge-liberada');
+            if (oldBadge) oldBadge.remove();
+
+            // Adiciona novo badge
+            const badge = document.createElement('br');
+            const small = document.createElement('small');
+            small.className = 'badge-liberada';
+            small.style.cssText = 'color:#1e40af;background:#dbeafe;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block;margin-top:3px;';
+            
+            if (numContagens === 1) {
+                small.innerHTML = '<i class="fas fa-arrow-right"></i> Liberada 2ª contagem';
+            } else if (numContagens === 2) {
+                small.innerHTML = '<i class="fas fa-arrow-right"></i> Liberada 3ª contagem';
+            }
+            
+            strong.parentNode.insertBefore(badge, strong.nextSibling);
+            badge.parentNode.insertBefore(small, badge.nextSibling);
+        }
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-        const btnNova = document.getElementById('btnNovaContagem');
-        const btnFinalizar = document.getElementById('btnFinalizar');
-        const modal = document.getElementById('acaoModal');
+    // 4. Animar linha brevemente para chamar atenção
+    tr.style.transition = 'background-color 0.4s ease';
+    tr.style.backgroundColor = '#dbeafe'; // Azul claro
+    setTimeout(() => { tr.style.backgroundColor = ''; }, 800);
 
-        btnNova?.addEventListener('click', function() {
-            if (!acaoAtual) return;
-            const id = acaoAtual.id;
-            const n = acaoAtual.numContagens;
-            fecharAcaoModal();
-            if (n === 1) executarLiberar(id, 2);
-            else if (n === 2) executarLiberar(id, 3);
-            else showToast('Número máximo de contagens já atingido.', 'aviso');
-        });
+    showToast('Linha atualizada! A contagem foi liberada.', 'sucesso', 2500);
+}
 
-        btnFinalizar?.addEventListener('click', function() {
-            if (!acaoAtual) return;
-            const {
-                id,
-                partnumber
-            } = acaoAtual;
-            fecharAcaoModal();
-            executarEncerrar(id, partnumber);
-        });
+// ============================================================
+// AÇÕES AJAX COM FEEDBACK VISUAL E ATUALIZAÇÃO DINÂMICA
+// ============================================================
+function executarLiberar(contagemId, fase) {
+    const nomeFase = fase === 2 ? 'SEGUNDA' : 'TERCEIRA';
 
-        modal?.addEventListener('click', e => {
-            if (e.target === modal) fecharAcaoModal();
-        });
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') fecharAcaoModal();
-        });
-    });
-
-    // ============================================================
-    // AÇÕES AJAX COM FEEDBACK VISUAL
-    // ============================================================
-    function executarLiberar(contagemId, fase) {
-        const nomeFase = fase === 2 ? 'SEGUNDA' : 'TERCEIRA';
-
-        showConfirm(
-            `Deseja liberar a <strong>${nomeFase} contagem</strong> para este item?<br>
+    showConfirm(
+        `Deseja liberar a <strong>${nomeFase} contagem</strong> para este item?<br>
          <small style="color:var(--gray)">O operador poderá registrar a próxima contagem.</small>`,
-            () => {
-                const acao = fase === 2 ? 'liberar_segunda' : 'liberar_terceira';
-                const fd = new FormData();
-                fd.append('csrf_token', csrfToken);
-                fd.append('contagem_id', contagemId);
+        () => {
+            const acao = fase === 2 ? 'liberar_segunda' : 'liberar_terceira';
+            const fd = new FormData();
+            fd.append('csrf_token', csrfToken);
+            fd.append('contagem_id', contagemId);
 
-                fetch(`?pagina=ajax&acao=${acao}`, {
-                        method: 'POST',
-                        body: fd
-                    })
-                    .then(r => r.json())
-                    .then(d => {
-                        if (d.success) {
-                            showToast(d.message, 'sucesso');
-                            setTimeout(() => location.reload(), 1400);
+            // Mostrar loading no botão da linha
+            const btn = document.querySelector(`tr[data-contagem-id="${contagemId}"] .btn-acao`);
+            if (btn) btnLoading(btn, true);
+
+            fetch(`?pagina=ajax&acao=${acao}`, { method:'POST', body:fd })
+                .then(r => r.json())
+                .then(d => {
+                    if (btn) btnLoading(btn, false);
+
+                    if (d.success) {
+                        showToast(d.message, 'sucesso');
+
+                        // Atualizar linha dinamicamente SE os dados foram retornados
+                        if (d.data && d.data.id) {
+                            setTimeout(() => atualizarLinhaTabela(d.data.id, d.data), 400);
                         } else {
-                            showToast(d.message || 'Erro ao liberar contagem.', 'erro');
+                            // Fallback: reload após 1.5s se dados não vieram
+                            setTimeout(() => location.reload(), 1500);
                         }
-                    })
-                    .catch(() => showToast('Erro de comunicação com o servidor.', 'erro'));
-            }
-        );
-    }
+                    } else {
+                        showToast(d.message || 'Erro ao liberar contagem.', 'erro');
+                    }
+                })
+                .catch(err => {
+                    if (btn) btnLoading(btn, false);
+                    console.error('Erro de rede:', err);
+                    showToast('Erro de comunicação com o servidor.', 'erro');
+                });
+        }
+    );
+}
 
-    function executarEncerrar(contagemId, partnumber) {
-        showConfirm(
-            `Encerrar a contagem de <strong>${partnumber}</strong>?<br>
+function executarEncerrar(contagemId, partnumber) {
+    showConfirm(
+        `Encerrar a contagem de <strong>${partnumber}</strong>?<br>
          <small style="color:var(--gray)">Esta ação não pode ser desfeita. Nenhuma nova contagem será aceita para este item.</small>`,
-            () => {
-                const fd = new FormData();
-                fd.append('csrf_token', csrfToken);
-                fd.append('contagem_id', contagemId);
+        () => {
+            const fd = new FormData();
+            fd.append('csrf_token', csrfToken);
+            fd.append('contagem_id', contagemId);
 
-                fetch('?pagina=ajax&acao=finalizar_contagem', {
-                        method: 'POST',
-                        body: fd
-                    })
-                    .then(r => r.json())
-                    .then(d => {
-                        if (d.success) {
-                            showToast(d.message, 'sucesso');
-                            setTimeout(() => location.reload(), 1400);
-                        } else {
-                            showToast(d.message || 'Erro ao encerrar.', 'erro');
+            // Mostrar loading no botão
+            const btn = document.querySelector(`tr[data-contagem-id="${contagemId}"] .btn-acao`);
+            if (btn) btnLoading(btn, true);
+
+            fetch('?pagina=ajax&acao=finalizar_contagem', { method:'POST', body:fd })
+                .then(r => r.json())
+                .then(d => {
+                    if (btn) btnLoading(btn, false);
+
+                    if (d.success) {
+                        showToast(d.message, 'sucesso');
+
+                        // Atualizar linha: marcar como encerrada
+                        const tr = document.querySelector(`tr[data-contagem-id="${contagemId}"]`);
+                        if (tr) {
+                            tr.className = 'linha-encerrado';
+                            
+                            const tdStatus = tr.querySelector('td:nth-child(7)');
+                            if (tdStatus) {
+                                tdStatus.innerHTML = '<span class="status-badge status-encerrado"><i class="fas fa-lock"></i> Encerrado</span>';
+                            }
+                            
+                            const tdAcoes = tr.querySelector('td:nth-child(10)');
+                            if (tdAcoes) {
+                                tdAcoes.innerHTML = '<span style="color:var(--gray);font-size:12px;"><i class="fas fa-lock"></i></span>';
+                            }
+
+                            // Animar
+                            tr.style.transition = 'all 0.4s ease';
+                            tr.style.backgroundColor = '#fef2f2';
+                            setTimeout(() => { tr.style.backgroundColor = ''; }, 800);
                         }
-                    })
-                    .catch(() => showToast('Erro de comunicação com o servidor.', 'erro'));
-            }
-        );
-    }
+                    } else {
+                        showToast(d.message || 'Erro ao encerrar.', 'erro');
+                    }
+                })
+                .catch(err => {
+                    if (btn) btnLoading(btn, false);
+                    console.error('Erro de rede:', err);
+                    showToast('Erro de comunicação com o servidor.', 'erro');
+                });
+        }
+    );
+}
 </script>
 <?php require SRC_PATH . '/Views/layout/footer.php'; ?>

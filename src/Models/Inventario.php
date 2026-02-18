@@ -45,8 +45,14 @@ class Inventario
     {
         $offset = ($page - 1) * $perPage;
 
+        // COUNT separado (substitui SQL_CALC_FOUND_ROWS)
+        $countResult = $this->db->query(
+            "SELECT COUNT(*) AS total FROM inventarios WHERE status IN ('fechado','cancelado')"
+        );
+        $total = (int) $countResult->fetch_assoc()['total'];
+
         $stmt = $this->db->prepare(
-            "SELECT SQL_CALC_FOUND_ROWS i.*, u.nome AS admin_nome
+            "SELECT i.*, u.nome AS admin_nome
              FROM inventarios i
              LEFT JOIN usuarios u ON i.admin_id = u.id
              WHERE i.status IN ('fechado','cancelado')
@@ -58,13 +64,10 @@ class Inventario
 
         $inventarios = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        $total = (int) $this->db->query('SELECT FOUND_ROWS() AS total')
-            ->fetch_assoc()['total'];
-
         return [
             'items'       => $inventarios,
             'page'        => $page,
-            'total_pages' => (int) ceil($total / $perPage),
+            'total_pages' => $total > 0 ? (int) ceil($total / $perPage) : 1,
             'total'       => $total,
         ];
     }

@@ -126,12 +126,6 @@ class Migrations
                 INDEX idx_deposito (deposito)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
-            /* -------------------------------------------------------
-             * Tabela de notificações para o admin.
-             * Leve: sem campo "lida" — o JS controla via timestamp
-             * armazenado em sessionStorage do navegador.
-             * Só INSERT ao registrar, nunca UPDATE.
-             * ------------------------------------------------------- */
             'notificacoes_admin' => "CREATE TABLE IF NOT EXISTS notificacoes_admin (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 inventario_id INT NOT NULL,

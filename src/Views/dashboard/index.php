@@ -120,8 +120,10 @@ $msgClass = str_contains((string) $message, 'sucesso') ? 'sucesso' : 'erro';
                                    placeholder="Ex: Inventário Trimestral — Setor A">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus-circle"></i> Criar Novo Inventário
+                    <button type="submit" class="btn btn-primary"
+                            data-loading-text="Criando..." data-success-text="Criado!"
+                            data-btn-anim="spinner">
+                        <span class="btn-text"><i class="fas fa-plus-circle"></i> Criar Novo Inventário</span>
                     </button>
                 </form>
 
@@ -146,8 +148,10 @@ $msgClass = str_contains((string) $message, 'sucesso') ? 'sucesso' : 'erro';
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                         <input type="hidden" name="acao_inventario" value="fechar">
                         <input type="hidden" name="inventario_id"   value="<?= $inventario['id'] ?>">
-                        <button type="submit" class="btn btn-danger">
-                            <i class="fas fa-lock"></i> Fechar Inventário
+                        <button type="submit" class="btn btn-danger"
+                                data-loading-text="Fechando..." data-success-text="Fechado!"
+                                data-btn-anim="pulse">
+                            <span class="btn-text"><i class="fas fa-lock"></i> Fechar Inventário</span>
                         </button>
                     </form>
 

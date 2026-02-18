@@ -1,0 +1,21 @@
+Options -Indexes
+RewriteEngine On
+
+# Bloquear acesso a arquivos sensíveis
+<FilesMatch "\.(env|log|sql|sh|bak)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Redirecionar tudo para index.php (exceto assets estáticos)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Headers de segurança
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

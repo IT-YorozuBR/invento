@@ -13,7 +13,7 @@ unset($_SESSION['flash_error']);
     <div class="login-box">
         <div class="login-header">
 
-                <img src="/public/assets/Inserir um subtítulo.png" style="height: 300px"></img>
+                <img src="/public/assets/Ivento.png" style="height: 300px"></img>
                 <!-- <h1><i class="fas fa-boxes"></i> Invento</h1>
             <p>Controle de Inventário Profissional</p> -->
         </div>
