@@ -136,20 +136,31 @@ class CadastrosController
         header('Location: ?pagina=cadastros&tipo=depositos');
         exit;
     }
-
     private function excluirPartnumber(): void
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        // Pega o nome do part number enviado pelo formulário
+        $partnumber = trim($_POST['partnumber'] ?? '');
 
-        if ($id <= 0) {
-            $_SESSION['flash_error'] = 'ID inválido.';
-            return;
+        if (empty($partnumber)) {
+            $_SESSION['flash_error'] = 'Nome do part number inválido.';
+            header('Location: ?pagina=cadastros&tipo=partnumbers');
+            exit;
         }
 
-        // Aqui você pode adicionar lógica de exclusão se tiver o método no model
-        $_SESSION['flash_error'] = 'Funcionalidade de exclusão ainda não implementada.';
-    }
+        // Instancia o model e tenta excluir
+        $partnumberModel = new \App\Models\PartNumber();
+        $result = $partnumberModel->delete($partnumber);
 
+        if ($result['success']) {
+            $_SESSION['flash_success'] = $result['message'];
+        } else {
+            $_SESSION['flash_error'] = $result['message'];
+        }
+
+        // Redireciona de volta para a aba de part numbers
+        header('Location: ?pagina=cadastros&tipo=partnumbers');
+        exit;
+    }
     private function consumeFlash(): string
     {
         $msg = $_SESSION['flash_success'] ?? $_SESSION['flash_error'] ?? '';

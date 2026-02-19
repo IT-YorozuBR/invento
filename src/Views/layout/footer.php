@@ -2,7 +2,7 @@
 <?php if (($_GET['pagina'] ?? 'login') !== 'login' && Security::isAuthenticated()): ?>
 <footer class="footer">
     <p>&copy; <?= date('Y') ?> Invento </p>
-    <p style="font-size:12px;opacity:.6;margin-top:4px;">Estrutura MVC &middot; PHP 8+ &middot; MySQL</p>
+    <p style="font-size:12px;opacity:.6;margin-top:4px;">Construido pelo tepartamento de TI &middot; Yorozu &middot; BR</p>
 </footer>
 <?php endif; ?>
 
