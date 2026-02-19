@@ -12,13 +12,13 @@ class Migrations
     public static function run(): void
     {
         try {
-            $port = $_ENV['DB_PORT'] ?? '3307';
-            $host = $_ENV['DB_HOST'] ?? 'localhost';
-            $user = $_ENV['DB_USER'] ?? '';
-            $pass = $_ENV['DB_PASS'] ?? '';
-            $name = $_ENV['DB_NAME'] ?? '';
+            $port = getenv('MYSQLPORT') ?: '3306';
+            $host = getenv('MYSQLHOST') ?: 'localhost';
+            $user = getenv('MYSQLUSER') ?: '';
+            $pass = getenv('MYSQLPASSWORD') ?: '';
+            $name = getenv('MYSQLDATABASE') ?: '';
 
-            $conn = new mysqli($host, $user, $pass);
+            $conn = new mysqli($host, $user, $pass, '', (int)$port);
             if ($conn->connect_error) {
                 throw new Exception('Erro: ' . $conn->connect_error);
             }
@@ -36,6 +36,7 @@ class Migrations
             die('Erro na inicialização do banco de dados. Contate o administrador.');
         }
     }
+
 
     private static function createTables(mysqli $conn): void
     {
