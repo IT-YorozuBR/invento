@@ -361,8 +361,9 @@ function showConfirm(msg, onYes, onNo = null) {
 // QR CODE SCANNER — câmera traseira forçada, sem dropdown de seleção
 // ============================================================
 let html5QrcodeScanner = null; // mantido para compatibilidade com exports
-let _html5Qrcode = null;       // instância real (Html5Qrcode)
+let _html5Qrcode = null;
 let qrCodeActive = false;
+let _scanProcessado = false; // evita callback duplo do mesmo QR
 
 function iniciarScannerQR() {
     if (qrCodeActive) { fecharScannerQR(); return; }
@@ -372,16 +373,12 @@ function iniciarScannerQR() {
 
     modal.style.display = 'flex';
     qrCodeActive = true;
+    _scanProcessado = false;
 
     _html5Qrcode = new Html5Qrcode('qr-reader');
 
-    const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1,
-    };
+    const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
 
-    // Tenta câmera traseira. Se não existir, cai para qualquer câmera disponível.
     _html5Qrcode.start(
         { facingMode: { exact: 'environment' } },
         config,
@@ -393,7 +390,7 @@ function iniciarScannerQR() {
             config,
             onScanSuccess,
             () => {}
-        ).catch((err) => {
+        ).catch(() => {
             showToast('Não foi possível acessar a câmera.', 'erro');
             fecharScannerQR();
         });
@@ -401,16 +398,11 @@ function iniciarScannerQR() {
 }
 
 function onScanSuccess(text) {
-    const reader = document.getElementById('qr-reader');
-    if (reader) { reader.style.borderColor = 'var(--success)'; }
+    if (_scanProcessado) return; // ignora callbacks duplicados
+    _scanProcessado = true;
 
-    if (_html5Qrcode) {
-        const scanner = _html5Qrcode;
-        _html5Qrcode = null; // zera antes de fechar para evitar double-stop
-        scanner.stop().catch(() => {}).finally(() => { setTimeout(fecharScannerQR, 300); });
-    } else {
-        setTimeout(fecharScannerQR, 300);
-    }
+    // Fecha o modal imediatamente — não espera .stop()
+    fecharScannerQR();
 
     if (text.length >= 4) {
         const dep = text.substring(0, 3).toUpperCase();
@@ -428,13 +420,20 @@ function onScanSuccess(text) {
 }
 
 function fecharScannerQR() {
-    if (_html5Qrcode) {
-        _html5Qrcode.stop().catch(() => {}).finally(() => { _html5Qrcode.clear(); _html5Qrcode = null; });
-    }
-    html5QrcodeScanner = null;
+    // Fecha o modal imediatamente
     const modal = document.getElementById('qrScannerModal');
     if (modal) { modal.classList.add('fade-out'); setTimeout(() => { modal.style.display = 'none'; modal.classList.remove('fade-out'); }, CONFIG.ANIMATION_MS); }
+
+    // Para a câmera em background sem bloquear o fechamento
+    if (_html5Qrcode) {
+        const scanner = _html5Qrcode;
+        _html5Qrcode = null;
+        scanner.stop().catch(() => {});
+    }
+
+    html5QrcodeScanner = null;
     qrCodeActive = false;
+    _scanProcessado = false;
 }
 
 function fillFieldAnimated(id, value) {
