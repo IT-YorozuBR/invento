@@ -3,10 +3,10 @@
    ============================================= */
 
 const CONFIG = {
-    DEBOUNCE_DELAY: 280,
-    TOAST_DURATION: 4000,
-    ANIMATION_MS: 300,
-    NOTIF_POLL_MS: 45000, // 45s — leve, sem sobrecarregar
+    DEBOUNCE_DELAY:   280,
+    TOAST_DURATION:   4000,
+    ANIMATION_MS:     300,
+    NOTIF_POLL_MS:    45000, // 45s — leve, sem sobrecarregar
 };
 
 // ============================================================
@@ -45,10 +45,10 @@ function showToast(text, type = 'info', duration = CONFIG.TOAST_DURATION) {
 
 // Substitui alert() nativo por toast
 window._origAlert = window.alert;
-window.alert = function (msg) {
+window.alert = function(msg) {
     const isSuccess = msg.startsWith('✅') || msg.startsWith('🔒');
-    const isError = msg.startsWith('❌') || msg.startsWith('⚠');
-    const type = isSuccess ? 'sucesso' : isError ? 'erro' : 'info';
+    const isError   = msg.startsWith('❌') || msg.startsWith('⚠');
+    const type      = isSuccess ? 'sucesso' : isError ? 'erro' : 'info';
     showToast(msg, type);
 };
 
@@ -74,8 +74,8 @@ window.alert = function (msg) {
 //   automaticamente, sem nenhuma linha de JS extra nas views.
 //
 const ButtonState = (() => {
-    const STATES = ['loading', 'success', 'error'];
-    const TIMEOUT = 30_000; // ms padrão de timeout
+    const STATES   = ['loading', 'success', 'error'];
+    const TIMEOUT  = 30_000; // ms padrão de timeout
 
     // Mapa de timers de timeout por botão (WeakMap = sem memory leak)
     const _timers = new WeakMap();
@@ -116,7 +116,7 @@ const ButtonState = (() => {
 
     function _setIconForAnim(btn) {
         const anim = btn.dataset.btnAnim || 'spinner';
-        const ic = btn.querySelector('.btn-icon-state');
+        const ic   = btn.querySelector('.btn-icon-state');
         if (!ic) return;
         ic.innerHTML = '';
 
@@ -163,7 +163,7 @@ const ButtonState = (() => {
 
         const txt = text || btn.dataset.successText || 'Feito!';
         const textEl = btn.querySelector('.btn-text');
-        const ic = btn.querySelector('.btn-icon-state');
+        const ic     = btn.querySelector('.btn-icon-state');
 
         if (textEl) textEl.textContent = txt;
         if (ic) ic.innerHTML = ''; // CSS ::before renderiza ✓
@@ -184,7 +184,7 @@ const ButtonState = (() => {
 
         const txt = text || btn.dataset.errorText || 'Erro!';
         const textEl = btn.querySelector('.btn-text');
-        const ic = btn.querySelector('.btn-icon-state');
+        const ic     = btn.querySelector('.btn-icon-state');
 
         if (textEl) textEl.textContent = txt;
         if (ic) ic.innerHTML = '';
@@ -221,7 +221,7 @@ const ButtonState = (() => {
     /* ─── Retrocompat com código legado ─────────────────── */
     function legacyBtnLoading(btn, start = true) {
         if (start) loading(btn);
-        else reset(btn);
+        else       reset(btn);
     }
 
     return { loading, success, error, reset, _legacyToggle: legacyBtnLoading };
@@ -350,7 +350,7 @@ function showConfirm(msg, onYes, onNo = null) {
     };
 
     overlay.querySelector('#_confirmYes').addEventListener('click', () => { close(); onYes(); });
-    overlay.querySelector('#_confirmNo').addEventListener('click', () => { close(); if (onNo) onNo(); });
+    overlay.querySelector('#_confirmNo').addEventListener('click',  () => { close(); if (onNo) onNo(); });
     overlay.addEventListener('click', e => { if (e.target === overlay) { close(); if (onNo) onNo(); } });
     document.addEventListener('keydown', function esc(e) {
         if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
@@ -386,13 +386,13 @@ function iniciarScannerQR() {
         { facingMode: { exact: 'environment' } },
         config,
         onScanSuccess,
-        () => { }
+        () => {}
     ).catch(() => {
         _html5Qrcode.start(
             { facingMode: 'user' },
             config,
             onScanSuccess,
-            () => { }
+            () => {}
         ).catch((err) => {
             showToast('Não foi possível acessar a câmera.', 'erro');
             fecharScannerQR();
@@ -405,14 +405,16 @@ function onScanSuccess(text) {
     if (reader) { reader.style.borderColor = 'var(--success)'; }
 
     if (_html5Qrcode) {
-        _html5Qrcode.stop().catch(() => { }).finally(() => { setTimeout(fecharScannerQR, 300); });
+        const scanner = _html5Qrcode;
+        _html5Qrcode = null; // zera antes de fechar para evitar double-stop
+        scanner.stop().catch(() => {}).finally(() => { setTimeout(fecharScannerQR, 300); });
     } else {
         setTimeout(fecharScannerQR, 300);
     }
 
     if (text.length >= 4) {
         const dep = text.substring(0, 3).toUpperCase();
-        const pn = text.substring(3);
+        const pn  = text.substring(3);
         fillFieldAnimated('depositoInput', dep);
         fillFieldAnimated('partnumberInput', pn);
         setTimeout(() => {
@@ -427,7 +429,7 @@ function onScanSuccess(text) {
 
 function fecharScannerQR() {
     if (_html5Qrcode) {
-        _html5Qrcode.stop().catch(() => { }).finally(() => { _html5Qrcode.clear(); _html5Qrcode = null; });
+        _html5Qrcode.stop().catch(() => {}).finally(() => { _html5Qrcode.clear(); _html5Qrcode = null; });
     }
     html5QrcodeScanner = null;
     const modal = document.getElementById('qrScannerModal');
@@ -448,9 +450,9 @@ function fillFieldAnimated(id, value) {
 // AUTOCOMPLETE LEVE (usa arrays locais já injetados pelo PHP)
 // ============================================================
 function setupAutocomplete(inputId, dropdownId, dataList, novoDivId = null) {
-    const input = document.getElementById(inputId);
+    const input    = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
-    const novoDiv = novoDivId ? document.getElementById(novoDivId) : null;
+    const novoDiv  = novoDivId ? document.getElementById(novoDivId) : null;
     if (!input || !dropdown) return;
 
     input.addEventListener('input', function () {
@@ -488,7 +490,7 @@ function setupAutocomplete(inputId, dropdownId, dataList, novoDivId = null) {
         const items = dropdown.querySelectorAll('.autocomplete-item');
         if (!items.length) return;
         let idx = Array.from(items).findIndex(i => i.classList.contains('selected'));
-        if (e.key === 'ArrowDown') { e.preventDefault(); idx = (idx + 1) % items.length; }
+        if (e.key === 'ArrowDown')  { e.preventDefault(); idx = (idx + 1) % items.length; }
         else if (e.key === 'ArrowUp') { e.preventDefault(); idx = idx <= 0 ? items.length - 1 : idx - 1; }
         else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].dispatchEvent(new MouseEvent('mousedown')); return; }
         else return;
@@ -518,58 +520,58 @@ function iniciarPollingNotificacoes() {
             method: 'GET',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (!data || data.total === 0) return;
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data || data.total === 0) return;
 
-                // Atualiza badge
-                const badge = document.getElementById('notifBadge');
-                const bell = document.getElementById('btnNotificacoes');
-                if (!badge || !bell) return;
+            // Atualiza badge
+            const badge = document.getElementById('notifBadge');
+            const bell  = document.getElementById('btnNotificacoes');
+            if (!badge || !bell) return;
 
-                const prevCount = parseInt(badge.dataset.count || '0');
-                const newCount = prevCount + data.total;
+            const prevCount = parseInt(badge.dataset.count || '0');
+            const newCount  = prevCount + data.total;
 
-                badge.dataset.count = newCount;
-                badge.textContent = newCount > 99 ? '99+' : newCount;
-                badge.style.display = 'flex';
-                bell.classList.add('has-new');
+            badge.dataset.count = newCount;
+            badge.textContent   = newCount > 99 ? '99+' : newCount;
+            badge.style.display = 'flex';
+            bell.classList.add('has-new');
 
-                // Re-anima sino
-                bell.querySelector('i').style.animation = 'none';
-                setTimeout(() => {
-                    bell.querySelector('i').style.animation = '';
-                    bell.querySelector('i').style.animation = 'bellShake 1s ease 0s 2';
-                }, 10);
+            // Re-anima sino
+            bell.querySelector('i').style.animation = 'none';
+            setTimeout(() => {
+                bell.querySelector('i').style.animation = '';
+                bell.querySelector('i').style.animation = 'bellShake 1s ease 0s 2';
+            }, 10);
 
-                // Popula lista
-                const lista = document.getElementById('notifLista');
-                if (!lista) return;
+            // Popula lista
+            const lista = document.getElementById('notifLista');
+            if (!lista) return;
 
-                const vazio = lista.querySelector('.notif-vazio');
-                if (vazio) vazio.remove();
+            const vazio = lista.querySelector('.notif-vazio');
+            if (vazio) vazio.remove();
 
-                data.items.forEach(item => {
-                    const faseLabel = ['', '1ª', '2ª', '3ª'][item.fase] || item.fase + 'ª';
-                    const ago = _timeAgo(item.ts);
-                    const el = document.createElement('div');
-                    el.className = 'notif-item';
-                    el.innerHTML = `
+            data.items.forEach(item => {
+                const faseLabel = ['', '1ª', '2ª', '3ª'][item.fase] || item.fase + 'ª';
+                const ago = _timeAgo(item.ts);
+                const el = document.createElement('div');
+                el.className = 'notif-item';
+                el.innerHTML = `
                     <div class="notif-item-usuario"><i class="fas fa-user-clock"></i> ${_escHtml(item.usuario_nome)}</div>
                     <div class="notif-item-detalhe">${faseLabel} contagem · <strong>${_escHtml(item.partnumber)}</strong> · ${_escHtml(item.deposito)}</div>
                     <div class="notif-item-time">${ago}</div>
                 `;
-                    lista.prepend(el);
-                });
+                lista.prepend(el);
+            });
 
-                // Mantém máximo de 20 itens na lista
-                const all = lista.querySelectorAll('.notif-item');
-                if (all.length > 20) all[all.length - 1].remove();
+            // Mantém máximo de 20 itens na lista
+            const all = lista.querySelectorAll('.notif-item');
+            if (all.length > 20) all[all.length - 1].remove();
 
-                // Atualiza timestamp para a próxima poll
-                sessionStorage.setItem(NOTIF_KEY, Math.floor(Date.now() / 1000));
-            })
-            .catch(() => { }); // silencia erros de rede — não é crítico
+            // Atualiza timestamp para a próxima poll
+            sessionStorage.setItem(NOTIF_KEY, Math.floor(Date.now() / 1000));
+        })
+        .catch(() => {}); // silencia erros de rede — não é crítico
     }
 
     // Primeira poll após 3s (aguarda página carregar)
@@ -579,8 +581,8 @@ function iniciarPollingNotificacoes() {
 
 function abrirPainelNotificacoes() {
     const painel = document.getElementById('painelNotificacoes');
-    const badge = document.getElementById('notifBadge');
-    const bell = document.getElementById('btnNotificacoes');
+    const badge  = document.getElementById('notifBadge');
+    const bell   = document.getElementById('btnNotificacoes');
     if (!painel) return;
 
     const aberto = painel.style.display !== 'none';
@@ -589,7 +591,7 @@ function abrirPainelNotificacoes() {
     if (!aberto) {
         // Zera badge ao abrir
         if (badge) { badge.style.display = 'none'; badge.dataset.count = '0'; }
-        if (bell) bell.classList.remove('has-new');
+        if (bell)  bell.classList.remove('has-new');
         // Avança timestamp para não repetir as mesmas notificações
         sessionStorage.setItem(NOTIF_KEY, Math.floor(Date.now() / 1000));
     }
@@ -603,7 +605,7 @@ function fecharPainelNotificacoes() {
 // Fecha painel ao clicar fora
 document.addEventListener('click', e => {
     const painel = document.getElementById('painelNotificacoes');
-    const bell = document.getElementById('btnNotificacoes');
+    const bell   = document.getElementById('btnNotificacoes');
     if (painel && painel.style.display !== 'none' && !painel.contains(e.target) && !bell?.contains(e.target)) {
         painel.style.display = 'none';
     }
@@ -611,14 +613,14 @@ document.addEventListener('click', e => {
 
 function _timeAgo(ts) {
     const diff = Math.floor(Date.now() / 1000) - ts;
-    if (diff < 60) return 'agora mesmo';
+    if (diff < 60)   return 'agora mesmo';
     if (diff < 3600) return Math.floor(diff / 60) + ' min atrás';
     if (diff < 86400) return Math.floor(diff / 3600) + 'h atrás';
     return Math.floor(diff / 86400) + 'd atrás';
 }
 
 function _escHtml(s) {
-    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ============================================================
@@ -700,7 +702,7 @@ function abrirModalTerceiraContagem(contagemId, primaria, secundaria) {
     if (!overlay) return;
     document.getElementById('contagemId').value = contagemId;
     document.getElementById('primeiraContagemValor').textContent = primaria;
-    document.getElementById('segundaContagemValor').textContent = secundaria;
+    document.getElementById('segundaContagemValor').textContent  = secundaria;
     const input = document.getElementById('quantidadeTerceira');
     if (input) input.value = Math.round((primaria + secundaria) / 2);
     overlay.style.display = 'flex';
@@ -718,22 +720,22 @@ function fecharModal() {
 // ============================================================
 // EXPORTS
 // ============================================================
-window.showToast = showToast;
-window.showConfirm = showConfirm;
-window.btnLoading = btnLoading;          // legado
-window.ButtonState = ButtonState;         // novo sistema
-window.fetchWithState = fetchWithState;      // fetch integrado
+window.showToast         = showToast;
+window.showConfirm       = showConfirm;
+window.btnLoading        = btnLoading;          // legado
+window.ButtonState       = ButtonState;         // novo sistema
+window.fetchWithState    = fetchWithState;      // fetch integrado
 window.setupAutocomplete = setupAutocomplete;
 window.fillFieldAnimated = fillFieldAnimated;
-window.validateForm = validateForm;
-window.abrirPainelNotificacoes = abrirPainelNotificacoes;
+window.validateForm      = validateForm;
+window.abrirPainelNotificacoes  = abrirPainelNotificacoes;
 window.fecharPainelNotificacoes = fecharPainelNotificacoes;
 // ============================================================
 // COMPATIBILIDADE COM NEXT.JS — FUNÇÕES ADICIONAIS
 // ============================================================
 
 // Substitui a função confirmar() do PHP legado
-window.confirmar = function (msg) {
+window.confirmar = function(msg) {
     return confirm(msg);
 };
 
@@ -741,9 +743,9 @@ window.confirmar = function (msg) {
 // AUTOCOMPLETE VIA API (usado na página de contagem)
 // ============================================================
 function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSelectExtra = null) {
-    const input = document.getElementById(inputId);
+    const input    = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
-    const novoDiv = novoDivId ? document.getElementById(novoDivId) : null;
+    const novoDiv  = novoDivId ? document.getElementById(novoDivId) : null;
     if (!input || !dropdown) return;
 
     let debounceTimer = null;
@@ -773,7 +775,7 @@ function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSel
 
                 data.forEach(item => {
                     const pn = item.partnumber || item.deposito || item;
-                    const d = document.createElement('div');
+                    const d  = document.createElement('div');
                     d.className = 'autocomplete-item';
                     d.innerHTML = `<strong>${_escHtml(pn)}</strong>${item.descricao ? ' — ' + _escHtml(item.descricao) : ''}`;
                     d.addEventListener('mousedown', e => {
@@ -789,7 +791,7 @@ function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSel
 
                 dropdown.style.display = 'block';
                 if (novoDiv) novoDiv.style.display = 'none';
-            } catch (e) {
+            } catch(e) {
                 dropdown.style.display = 'none';
             }
         }, 280);
@@ -805,7 +807,7 @@ function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSel
         const items = dropdown.querySelectorAll('.autocomplete-item');
         if (!items.length) return;
         let idx = Array.from(items).findIndex(i => i.classList.contains('selected'));
-        if (e.key === 'ArrowDown') { e.preventDefault(); idx = (idx + 1) % items.length; }
+        if (e.key === 'ArrowDown')  { e.preventDefault(); idx = (idx + 1) % items.length; }
         else if (e.key === 'ArrowUp') { e.preventDefault(); idx = idx <= 0 ? items.length - 1 : idx - 1; }
         else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].dispatchEvent(new MouseEvent('mousedown')); return; }
         else return;
@@ -821,12 +823,12 @@ function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSel
 let _verificarTimer = null;
 
 function verificarStatusPartnumber() {
-    const pn = document.getElementById('partnumberInput')?.value.trim().toUpperCase();
+    const pn  = document.getElementById('partnumberInput')?.value.trim().toUpperCase();
     const dep = document.getElementById('depositoInput')?.value.trim().toUpperCase();
-    const avisoEl = document.getElementById('avisoStatusContagem');
+    const avisoEl    = document.getElementById('avisoStatusContagem');
     const encerradoEl = document.getElementById('erroPartNumberEncerrado');
 
-    if (avisoEl) avisoEl.style.display = 'none';
+    if (avisoEl)    avisoEl.style.display = 'none';
     if (encerradoEl) encerradoEl.style.display = 'none';
 
     if (!pn || !dep || pn.length < 2 || dep.length < 2) return;
@@ -862,7 +864,7 @@ function verificarStatusPartnumber() {
             //     avisoEl.textContent = msg;
             //     avisoEl.style.display = 'block';
             // }
-        } catch (e) { }
+        } catch(e) {}
     }, 500);
 }
 
@@ -877,7 +879,7 @@ _onReady(function () {
         document.getElementById('partnumberInput').addEventListener('blur', verificarStatusPartnumber);
     }
     if (document.getElementById('depositoInput')) {
-        document.getElementById('depositoInput').addEventListener('change', function () {
+        document.getElementById('depositoInput').addEventListener('change', function() {
             const pn = document.getElementById('partnumberInput')?.value.trim();
             if (pn) verificarStatusPartnumber();
         });
@@ -898,7 +900,7 @@ _onReady(function () {
 // MODAL DE AÇÕES (liberar 2ª/3ª contagem, encerrar)
 // ============================================================
 function abrirAcaoModal(contagemId, partnumber, deposito, inventarioId, numContagens, isAdmin) {
-    const modal = document.getElementById('acaoModal');
+    const modal   = document.getElementById('acaoModal');
     const content = document.getElementById('acaoModalContent');
     if (!modal || !content) return;
 
@@ -944,13 +946,13 @@ function abrirAcaoModal(contagemId, partnumber, deposito, inventarioId, numConta
 
     // Bind eventos
     content.querySelectorAll('.btn-liberar').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function() {
             fecharAcaoModal();
             executarLiberar(parseInt(this.dataset.id), parseInt(this.dataset.fase));
         });
     });
     content.querySelectorAll('.btn-encerrar').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function() {
             fecharAcaoModal();
             executarEncerrar(parseInt(this.dataset.id), this.dataset.pn);
         });
@@ -972,8 +974,8 @@ function atualizarLinhaTabela(contagemId, dados) {
     if (!tr) { setTimeout(() => location.reload(), 1500); return; }
 
     const numContagens = dados.numero_contagens || 1;
-    const podeNova = dados.pode_nova_contagem || false;
-    const status = dados.status || 'primaria';
+    const podeNova     = dados.pode_nova_contagem || false;
+    const status       = dados.status || 'primaria';
 
     tr.className = '';
     if (dados.finalizado) {
@@ -982,9 +984,9 @@ function atualizarLinhaTabela(contagemId, dados) {
         tr.classList.add('linha-primaria');
     } else {
         const classMap = {
-            'primaria': 'linha-primaria',
+            'primaria':   'linha-primaria',
             'secundaria': 'linha-primaria',
-            'concluida': 'linha-match',
+            'concluida':  'linha-match',
             'divergente': 'linha-divergente'
         };
         tr.classList.add(classMap[status] || 'linha-primaria');
@@ -1001,9 +1003,9 @@ function atualizarLinhaTabela(contagemId, dados) {
             else badgeHtml = '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>';
         } else {
             const badgeMap = {
-                'primaria': '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>',
+                'primaria':   '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>',
                 'secundaria': '<span class="status-badge status-secundaria"><i class="fas fa-layer-group"></i> 2ª Contagem</span>',
-                'concluida': '<span class="status-badge status-concluida"><i class="fas fa-check-circle"></i> Concluída</span>',
+                'concluida':  '<span class="status-badge status-concluida"><i class="fas fa-check-circle"></i> Concluída</span>',
                 'divergente': '<span class="status-badge status-divergente"><i class="fas fa-exclamation-triangle"></i> Divergente</span>',
             };
             badgeHtml = badgeMap[status] || badgeMap.primaria;
@@ -1041,7 +1043,7 @@ function executarLiberar(contagemId, fase) {
          <small style="color:var(--gray)">O operador poderá registrar a próxima contagem.</small>`,
         () => {
             const acao = fase === 2 ? 'liberar_segunda' : 'liberar_terceira';
-            const fd = new FormData();
+            const fd   = new FormData();
             if (window.csrfToken) fd.append('csrf_token', window.csrfToken);
             fd.append('contagem_id', contagemId);
 
@@ -1112,11 +1114,11 @@ function executarEncerrar(contagemId, partnumber) {
     );
 }
 
-window.abrirAcaoModal = abrirAcaoModal;
-window.fecharAcaoModal = fecharAcaoModal;
-window.executarLiberar = executarLiberar;
-window.executarEncerrar = executarEncerrar;
+window.abrirAcaoModal     = abrirAcaoModal;
+window.fecharAcaoModal    = fecharAcaoModal;
+window.executarLiberar    = executarLiberar;
+window.executarEncerrar   = executarEncerrar;
 window.atualizarLinhaTabela = atualizarLinhaTabela;
 window.verificarStatusPartnumber = verificarStatusPartnumber;
-window.iniciarScannerQR = iniciarScannerQR;
-window.fecharScannerQR = fecharScannerQR;
+window.iniciarScannerQR   = iniciarScannerQR;
+window.fecharScannerQR    = fecharScannerQR;
