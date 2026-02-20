@@ -20,11 +20,14 @@ export default async function InventariosConcluidos({
   const message = searchParams.msg || ''
   const msgType = searchParams.msgType || 'sucesso'
 
-
   const fmtDate = (d: string | Date | null) => {
     if (!d) return '—'
-    const dt = d instanceof Date ? d : new Date(String(d).slice(0, 10) + 'T12:00:00')
-    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR')
+    // Pega apenas a data (YYYY-MM-DD) e adiciona meio-dia UTC
+    const dateStr = d instanceof Date
+      ? d.toISOString().split('T')[0]
+      : String(d).split('T')[0]
+    const dt = new Date(dateStr + 'T12:00:00Z')
+    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
   }
   return (
     <>

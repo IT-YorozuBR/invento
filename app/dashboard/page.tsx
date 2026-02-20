@@ -22,13 +22,21 @@ export default async function DashboardPage({
   }
 
   const inventario = await inventarioFindAtivo()
-  const stats      = inventario ? await inventarioGetEstatisticas(inventario.id) : null
-  const message    = searchParams.msg || ''
-  const msgType    = searchParams.msgType || 'sucesso'
+  const stats = inventario ? await inventarioGetEstatisticas(inventario.id) : null
+  const message = searchParams.msg || ''
+  const msgType = searchParams.msgType || 'sucesso'
 
   // Build CSRF token (using random for this session)
   const csrfToken = Math.random().toString(36).slice(2)
-
+  const fmtDate = (d: string | Date | null) => {
+    if (!d) return '—'
+    // Pega apenas a data (YYYY-MM-DD) e adiciona meio-dia UTC
+    const dateStr = d instanceof Date
+      ? d.toISOString().split('T')[0]
+      : String(d).split('T')[0]
+    const dt = new Date(dateStr + 'T12:00:00Z')
+    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  }
   return (
     <>
       <Navbar session={session} currentPage="dashboard" />
@@ -55,7 +63,7 @@ export default async function DashboardPage({
                   <h3 style={{ color: 'var(--success)', marginBottom: '8px' }}><i className="fas fa-play-circle"></i> Inventário em Andamento</h3>
                   <p style={{ color: 'var(--gray)', fontSize: '14px' }}>
                     <strong>Código:</strong> {inventario.codigo} &nbsp;&bull;&nbsp;
-                    <strong>Data:</strong> {new Date(inventario.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')} &nbsp;&bull;&nbsp;
+                    <strong>Data:</strong> {fmtDate(inventario.data_inicio)} &nbsp;&bull;&nbsp;
                     <strong>Descrição:</strong> {inventario.descricao}
                   </p>
                 </div>
@@ -147,9 +155,9 @@ export default async function DashboardPage({
                 <>
                   <div style={{ background: '#f8f9fa', padding: '18px', borderRadius: 'var(--border-r)', marginBottom: '20px', display: 'grid', gap: '8px', fontSize: '14px' }}>
                     {[
-                      ['var(--success)', 'Concluídas',  stats?.concluidas  ?? 0],
-                      ['var(--danger)',  'Divergentes',  stats?.divergentes ?? 0],
-                      ['var(--warning)', 'Pendentes',   stats?.pendentes   ?? 0],
+                      ['var(--success)', 'Concluídas', stats?.concluidas ?? 0],
+                      ['var(--danger)', 'Divergentes', stats?.divergentes ?? 0],
+                      ['var(--warning)', 'Pendentes', stats?.pendentes ?? 0],
                     ].map(([cor, label, val]) => (
                       <div key={String(label)} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: String(cor), flexShrink: 0 }}></div>
@@ -195,7 +203,8 @@ export default async function DashboardPage({
 
         <ModalFooter csrfToken={csrfToken} />
 
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script dangerouslySetInnerHTML={{
+          __html: `
           (function() {
             // Criar inventário
             const formCriar = document.getElementById('formCriarInventario');

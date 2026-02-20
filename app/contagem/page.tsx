@@ -307,7 +307,14 @@ export default async function ContagemPage({
                           <td style={{ fontSize: '13px' }}>{(c as any).usuario_nome || '—'}</td>
                           <td style={{ fontSize: '12px', whiteSpace: 'nowrap', color: 'var(--gray)' }}>
                             {c.data_contagem_primaria
-                              ? new Date(c.data_contagem_primaria).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                              ? new Date(c.data_contagem_primaria + ' UTC').toLocaleString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'America/Sao_Paulo'
+                              })
                               : '—'}
                           </td>
                           <td>

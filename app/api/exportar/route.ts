@@ -5,6 +5,31 @@ import { sessionOptions, SessionData, isAdmin } from '@/lib/session'
 import { inventarioFindById, contagemExportarDados, contagemExportarConsolidados } from '@/lib/models'
 import * as XLSX from 'xlsx'
 
+// Função auxiliar para formatar datas corretamente
+const formatDateBR = (d: string | Date | null): string => {
+  if (!d) return ''
+  // Adiciona 'Z' para interpretar como UTC e converte para horário de Brasília
+  const dt = new Date(String(d) + 'Z')
+  return isNaN(dt.getTime()) ? '' : dt.toLocaleString('pt-BR', { 
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const formatDateOnlyBR = (d: string | Date | null): string => {
+  if (!d) return '—'
+  // Para datas sem hora, usa meio-dia UTC para evitar problemas de fuso
+  const dateStr = d instanceof Date 
+    ? d.toISOString().split('T')[0] 
+    : String(d).split('T')[0]
+  const dt = new Date(dateStr + 'T12:00:00Z')
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+}
+
 export async function GET(req: NextRequest) {
   const cookieStore = cookies()
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
@@ -27,8 +52,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Inventário não encontrado.' }, { status: 404 })
   }
 
-  const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
-
   if (tipo === 'consolidado') {
     const rows = await contagemExportarConsolidados(inventarioId) as Record<string, unknown>[]
     const headers = ['Part Number', 'Descrição', 'Unidade', 'Qtd. Total', 'Nº Depósitos', 'Detalhes por Depósito']
@@ -36,7 +59,7 @@ export async function GET(req: NextRequest) {
       ['INVENTÁRIO', inventario.codigo],
       ['DESCRIÇÃO', inventario.descricao || ''],
       ['RELATÓRIO', 'CONSOLIDADO POR PARTNUMBER'],
-      ['DATA GERAÇÃO', new Date().toLocaleString('pt-BR')],
+      ['DATA GERAÇÃO', formatDateBR(new Date())],
       [],
     ]
     const dataRows = rows.map(r => [
@@ -56,8 +79,8 @@ export async function GET(req: NextRequest) {
   const meta: string[][] = [
     ['INVENTÁRIO', inventario.codigo],
     ['DESCRIÇÃO', inventario.descricao || ''],
-    ['DATA INÍCIO', fmtDate(inventario.data_inicio)],
-    ['DATA FIM', fmtDate(inventario.data_fim)],
+    ['DATA INÍCIO', formatDateOnlyBR(inventario.data_inicio)],
+    ['DATA FIM', formatDateOnlyBR(inventario.data_fim)],
     ['ADMINISTRADOR', inventario.admin_nome || ''],
     ['STATUS', inventario.status],
     [],
@@ -68,13 +91,12 @@ export async function GET(req: NextRequest) {
     r.quantidade_primaria, r.quantidade_secundaria,
     r.quantidade_terceira, r.quantidade_final,
     r.status,
-    // Nomes corretos no postgres (não mais contador_1/2/3)
     (r as any).usuario_nome,
     (r as any).usuario_secundario_nome,
     (r as any).usuario_terceiro_nome,
-    r.data_contagem_primaria ? new Date(r.data_contagem_primaria as string).toLocaleString('pt-BR') : '',
-    r.data_contagem_secundaria ? new Date(r.data_contagem_secundaria as string).toLocaleString('pt-BR') : '',
-    r.data_contagem_terceira ? new Date(r.data_contagem_terceira as string).toLocaleString('pt-BR') : '',
+    formatDateBR(r.data_contagem_primaria as string),
+    formatDateBR(r.data_contagem_secundaria as string),
+    formatDateBR(r.data_contagem_terceira as string),
     r.observacoes,
   ])
 
