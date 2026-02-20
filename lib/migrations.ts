@@ -99,7 +99,7 @@ async function createTables(conn: any): Promise<void> {
   ]
 
   for (const stmt of enumStatements) {
-    await conn.query(stmt).catch((err) => {
+    await conn.query(stmt).catch((err: any) => {
       if (!err.message.includes('already exists')) {
         console.error('Error creating enum:', err.message)
       }
