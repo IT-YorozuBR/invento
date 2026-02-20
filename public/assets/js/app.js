@@ -266,7 +266,7 @@ function _bindFormButtons() {
 // Escuta novos forms adicionados dinamicamente (modais, etc.)
 if (typeof MutationObserver !== 'undefined') {
     const _formObserver = new MutationObserver(() => _bindFormButtons());
-    document.addEventListener('DOMContentLoaded', () => {
+    _onReady(() => {
         _formObserver.observe(document.body, { childList: true, subtree: true });
         _bindFormButtons();
     });
@@ -489,7 +489,7 @@ function iniciarPollingNotificacoes() {
     function poll() {
         const desde = sessionStorage.getItem(NOTIF_KEY) || (Math.floor(Date.now() / 1000) - 60);
 
-        fetch(`?pagina=ajax&acao=notificacoes&desde=${desde}`, {
+        fetch(`/api/ajax?acao=notificacoes&desde=${desde}`, {
             method: 'GET',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -618,9 +618,15 @@ function validateForm(form) {
 }
 
 // ============================================================
-// DOM READY
+// DOM READY — helper seguro para scripts carregados afterInteractive
+// Funciona mesmo que DOMContentLoaded já tenha disparado
 // ============================================================
-document.addEventListener('DOMContentLoaded', function () {
+function _onReady(fn) {
+    if (document.readyState !== 'loading') { fn(); }
+    else { document.addEventListener('DOMContentLoaded', fn); }
+}
+
+_onReady(function () {
 
     // Vincula formulários ao sistema de estados
     _bindFormButtons();
@@ -697,3 +703,395 @@ window.fillFieldAnimated = fillFieldAnimated;
 window.validateForm      = validateForm;
 window.abrirPainelNotificacoes  = abrirPainelNotificacoes;
 window.fecharPainelNotificacoes = fecharPainelNotificacoes;
+// ============================================================
+// COMPATIBILIDADE COM NEXT.JS — FUNÇÕES ADICIONAIS
+// ============================================================
+
+// Substitui a função confirmar() do PHP legado
+window.confirmar = function(msg) {
+    return confirm(msg);
+};
+
+// ============================================================
+// AUTOCOMPLETE VIA API (usado na página de contagem)
+// ============================================================
+function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSelectExtra = null) {
+    const input    = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    const novoDiv  = novoDivId ? document.getElementById(novoDivId) : null;
+    if (!input || !dropdown) return;
+
+    let debounceTimer = null;
+
+    input.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        const val = this.value.trim();
+        dropdown.innerHTML = '';
+
+        if (val.length < 2) {
+            dropdown.style.display = 'none';
+            if (novoDiv) novoDiv.style.display = 'none';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                const resp = await fetch(`/api/ajax?tipo=${tipo}&termo=${encodeURIComponent(val)}`);
+                const data = await resp.json();
+
+                dropdown.innerHTML = '';
+                if (!data || data.length === 0) {
+                    dropdown.style.display = 'none';
+                    if (novoDiv) novoDiv.style.display = 'block';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const pn = item.partnumber || item.deposito || item;
+                    const d  = document.createElement('div');
+                    d.className = 'autocomplete-item';
+                    d.innerHTML = `<strong>${_escHtml(pn)}</strong>${item.descricao ? ' — ' + _escHtml(item.descricao) : ''}`;
+                    d.addEventListener('mousedown', e => {
+                        e.preventDefault();
+                        input.value = pn;
+                        dropdown.style.display = 'none';
+                        if (novoDiv) novoDiv.style.display = 'none';
+                        if (onSelectExtra) onSelectExtra(item);
+                        input.dispatchEvent(new Event('change'));
+                    });
+                    dropdown.appendChild(d);
+                });
+
+                dropdown.style.display = 'block';
+                if (novoDiv) novoDiv.style.display = 'none';
+            } catch(e) {
+                dropdown.style.display = 'none';
+            }
+        }, 280);
+    });
+
+    document.addEventListener('click', e => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    input.addEventListener('keydown', e => {
+        const items = dropdown.querySelectorAll('.autocomplete-item');
+        if (!items.length) return;
+        let idx = Array.from(items).findIndex(i => i.classList.contains('selected'));
+        if (e.key === 'ArrowDown')  { e.preventDefault(); idx = (idx + 1) % items.length; }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = idx <= 0 ? items.length - 1 : idx - 1; }
+        else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].dispatchEvent(new MouseEvent('mousedown')); return; }
+        else return;
+        items.forEach(i => i.classList.remove('selected'));
+        items[idx]?.classList.add('selected');
+        items[idx]?.scrollIntoView({ block: 'nearest' });
+    });
+}
+
+// ============================================================
+// VERIFICAÇÃO DE STATUS DO PARTNUMBER
+// ============================================================
+let _verificarTimer = null;
+
+function verificarStatusPartnumber() {
+    const pn  = document.getElementById('partnumberInput')?.value.trim().toUpperCase();
+    const dep = document.getElementById('depositoInput')?.value.trim().toUpperCase();
+    const avisoEl    = document.getElementById('avisoStatusContagem');
+    const encerradoEl = document.getElementById('erroPartNumberEncerrado');
+
+    if (avisoEl)    avisoEl.style.display = 'none';
+    if (encerradoEl) encerradoEl.style.display = 'none';
+
+    if (!pn || !dep || pn.length < 2 || dep.length < 2) return;
+
+    clearTimeout(_verificarTimer);
+    _verificarTimer = setTimeout(async () => {
+        try {
+            const fd = new FormData();
+            fd.append('partnumber', pn);
+            fd.append('deposito', dep);
+            const resp = await fetch('/api/ajax?acao=verificar_status_contagem', { method: 'POST', body: fd });
+            const data = await resp.json();
+
+            if (!data.existe) return;
+
+            if (data.finalizado) {
+                if (encerradoEl) encerradoEl.style.display = 'block';
+                return;
+            }
+
+            if (!avisoEl) return;
+
+            // let msg = '';
+            // if (data.pode_nova) {
+            //     if (data.numero_contagens === 1) msg = `⚡ 2ª contagem liberada pelo admin! Qtd. atual: ${data.quantidade_primaria}`;
+            //     else if (data.numero_contagens === 2) msg = `⚡ 3ª contagem liberada pelo admin!`;
+            // } else {
+            //     if (data.numero_contagens === 1) msg = `📋 1ª contagem registrada: ${data.quantidade_primaria} — Aguardando liberação da 2ª`;
+            //     else if (data.numero_contagens === 2) msg = `📋 2ª contagem: ${data.quantidade_secundaria} — Aguardando liberação da 3ª`;
+            // }
+
+            // if (msg) {
+            //     avisoEl.textContent = msg;
+            //     avisoEl.style.display = 'block';
+            // }
+        } catch(e) {}
+    }, 500);
+}
+
+// Inicializa autocomplete e verificação na página de contagem
+_onReady(function () {
+    if (document.getElementById('depositoInput')) {
+        setupAutocompleteApi('depositoInput', 'depositoDropdown', 'deposito', 'novoDepositoDiv');
+    }
+    if (document.getElementById('partnumberInput')) {
+        setupAutocompleteApi('partnumberInput', 'pnDropdown', 'partnumber', 'novoPnDiv');
+        document.getElementById('partnumberInput').addEventListener('change', verificarStatusPartnumber);
+        document.getElementById('partnumberInput').addEventListener('blur', verificarStatusPartnumber);
+    }
+    if (document.getElementById('depositoInput')) {
+        document.getElementById('depositoInput').addEventListener('change', function() {
+            const pn = document.getElementById('partnumberInput')?.value.trim();
+            if (pn) verificarStatusPartnumber();
+        });
+    }
+
+    // Event listener para botão de notificações
+    const btnNotif = document.getElementById('btnNotificacoes');
+    if (btnNotif) {
+        btnNotif.addEventListener('click', abrirPainelNotificacoes);
+    }
+    const btnFecharNotif = document.querySelector('.notif-fechar');
+    if (btnFecharNotif) {
+        btnFecharNotif.addEventListener('click', fecharPainelNotificacoes);
+    }
+});
+
+// ============================================================
+// MODAL DE AÇÕES (liberar 2ª/3ª contagem, encerrar)
+// ============================================================
+function abrirAcaoModal(contagemId, partnumber, deposito, inventarioId, numContagens, isAdmin) {
+    const modal   = document.getElementById('acaoModal');
+    const content = document.getElementById('acaoModalContent');
+    if (!modal || !content) return;
+
+    let html = `<p style="color:var(--gray);font-size:14px;margin-bottom:15px;">
+        <strong>${_escHtml(partnumber)}</strong> — ${_escHtml(deposito)}
+    </p>`;
+
+    if (isAdmin) {
+        if (numContagens === 1) {
+            html += `<div style="display:grid;gap:10px;">
+                <button class="btn btn-secondary btn-liberar" data-fase="2" data-id="${contagemId}">
+                    <i class="fas fa-unlock"></i> Liberar 2ª Contagem
+                </button>
+                <button class="btn btn-danger btn-encerrar" data-id="${contagemId}" data-pn="${_escHtml(partnumber)}">
+                    <i class="fas fa-times-circle"></i> Encerrar Contagem
+                </button>
+            </div>`;
+        } else if (numContagens === 2) {
+            html += `<div style="display:grid;gap:10px;">
+                <button class="btn btn-secondary btn-liberar" data-fase="3" data-id="${contagemId}">
+                    <i class="fas fa-unlock"></i> Liberar 3ª Contagem
+                </button>
+                <button class="btn btn-danger btn-encerrar" data-id="${contagemId}" data-pn="${_escHtml(partnumber)}">
+                    <i class="fas fa-times-circle"></i> Encerrar Contagem
+                </button>
+            </div>`;
+        } else {
+            html += `<div style="display:grid;gap:10px;">
+                <button class="btn btn-danger btn-encerrar" data-id="${contagemId}" data-pn="${_escHtml(partnumber)}">
+                    <i class="fas fa-times-circle"></i> Encerrar Contagem
+                </button>
+            </div>`;
+        }
+    } else {
+        html += `<p style="color:var(--gray)">Sem ações disponíveis.</p>`;
+    }
+
+    content.innerHTML = html;
+    modal.style.display = 'flex';
+    // Força reflow para ativar a transição CSS de opacity
+    void modal.offsetHeight;
+    modal.style.opacity = '1';
+
+    // Bind eventos
+    content.querySelectorAll('.btn-liberar').forEach(btn => {
+        btn.addEventListener('click', function() {
+            fecharAcaoModal();
+            executarLiberar(parseInt(this.dataset.id), parseInt(this.dataset.fase));
+        });
+    });
+    content.querySelectorAll('.btn-encerrar').forEach(btn => {
+        btn.addEventListener('click', function() {
+            fecharAcaoModal();
+            executarEncerrar(parseInt(this.dataset.id), this.dataset.pn);
+        });
+    });
+}
+
+function fecharAcaoModal() {
+    const modal = document.getElementById('acaoModal');
+    if (!modal) return;
+    modal.style.opacity = '0';
+    setTimeout(() => { modal.style.display = 'none'; }, 250);
+}
+
+// ============================================================
+// ATUALIZAÇÃO DINÂMICA DA LINHA APÓS LIBERAÇÃO
+// ============================================================
+function atualizarLinhaTabela(contagemId, dados) {
+    const tr = document.querySelector(`tr[data-contagem-id="${contagemId}"]`);
+    if (!tr) { setTimeout(() => location.reload(), 1500); return; }
+
+    const numContagens = dados.numero_contagens || 1;
+    const podeNova     = dados.pode_nova_contagem || false;
+    const status       = dados.status || 'primaria';
+
+    tr.className = '';
+    if (dados.finalizado) {
+        tr.classList.add('linha-encerrado');
+    } else if (podeNova) {
+        tr.classList.add('linha-primaria');
+    } else {
+        const classMap = {
+            'primaria':   'linha-primaria',
+            'secundaria': 'linha-primaria',
+            'concluida':  'linha-match',
+            'divergente': 'linha-divergente'
+        };
+        tr.classList.add(classMap[status] || 'linha-primaria');
+    }
+
+    const tdStatus = tr.querySelector('td:nth-child(7)');
+    if (tdStatus) {
+        let badgeHtml = '';
+        if (dados.finalizado) {
+            badgeHtml = '<span class="status-badge status-encerrado"><i class="fas fa-lock"></i> Encerrado</span>';
+        } else if (podeNova) {
+            if (numContagens === 1) badgeHtml = '<span class="status-badge status-secundaria"><i class="fas fa-unlock"></i> Aguardando 2ª contagem</span>';
+            else if (numContagens === 2) badgeHtml = '<span class="status-badge status-secundaria"><i class="fas fa-unlock"></i> Aguardando 3ª contagem</span>';
+            else badgeHtml = '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>';
+        } else {
+            const badgeMap = {
+                'primaria':   '<span class="status-badge status-primaria"><i class="fas fa-clock"></i> Em andamento</span>',
+                'secundaria': '<span class="status-badge status-secundaria"><i class="fas fa-layer-group"></i> 2ª Contagem</span>',
+                'concluida':  '<span class="status-badge status-concluida"><i class="fas fa-check-circle"></i> Concluída</span>',
+                'divergente': '<span class="status-badge status-divergente"><i class="fas fa-exclamation-triangle"></i> Divergente</span>',
+            };
+            badgeHtml = badgeMap[status] || badgeMap.primaria;
+        }
+        tdStatus.innerHTML = badgeHtml;
+    }
+
+    const tdPN = tr.querySelector('td:nth-child(2)');
+    if (tdPN && podeNova && !dados.finalizado) {
+        const strong = tdPN.querySelector('strong');
+        if (strong) {
+            const oldBadge = tdPN.querySelector('.badge-liberada');
+            if (oldBadge) oldBadge.remove();
+            const badge = document.createElement('br');
+            const small = document.createElement('small');
+            small.className = 'badge-liberada';
+            small.style.cssText = 'color:#1e40af;background:#dbeafe;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block;margin-top:3px;';
+            if (numContagens === 1) small.innerHTML = '<i class="fas fa-arrow-right"></i> Liberada 2ª contagem';
+            else if (numContagens === 2) small.innerHTML = '<i class="fas fa-arrow-right"></i> Liberada 3ª contagem';
+            strong.parentNode.insertBefore(badge, strong.nextSibling);
+            badge.parentNode.insertBefore(small, badge.nextSibling);
+        }
+    }
+
+    tr.style.transition = 'background-color 0.4s ease';
+    tr.style.backgroundColor = '#dbeafe';
+    setTimeout(() => { tr.style.backgroundColor = ''; }, 800);
+    showToast('Linha atualizada! A contagem foi liberada.', 'sucesso', 2500);
+}
+
+function executarLiberar(contagemId, fase) {
+    const nomeFase = fase === 2 ? 'SEGUNDA' : 'TERCEIRA';
+    showConfirm(
+        `Deseja liberar a <strong>${nomeFase} contagem</strong> para este item?<br>
+         <small style="color:var(--gray)">O operador poderá registrar a próxima contagem.</small>`,
+        () => {
+            const acao = fase === 2 ? 'liberar_segunda' : 'liberar_terceira';
+            const fd   = new FormData();
+            if (window.csrfToken) fd.append('csrf_token', window.csrfToken);
+            fd.append('contagem_id', contagemId);
+
+            const btn = document.querySelector(`tr[data-contagem-id="${contagemId}"] .btn-acao`);
+            if (btn) btnLoading(btn, true);
+
+            fetch(`/api/ajax?acao=${acao}`, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(d => {
+                    if (btn) btnLoading(btn, false);
+                    if (d.success) {
+                        showToast(d.message, 'sucesso');
+                        if (d.data && d.data.id) {
+                            setTimeout(() => atualizarLinhaTabela(d.data.id, d.data), 400);
+                        } else {
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    } else {
+                        showToast(d.message || 'Erro ao liberar contagem.', 'erro');
+                    }
+                })
+                .catch(err => {
+                    if (btn) btnLoading(btn, false);
+                    showToast('Erro de comunicação com o servidor.', 'erro');
+                });
+        }
+    );
+}
+
+function executarEncerrar(contagemId, partnumber) {
+    showConfirm(
+        `Encerrar a contagem de <strong>${partnumber}</strong>?<br>
+         <small style="color:var(--gray)">Esta ação não pode ser desfeita. Nenhuma nova contagem será aceita para este item.</small>`,
+        () => {
+            const fd = new FormData();
+            if (window.csrfToken) fd.append('csrf_token', window.csrfToken);
+            fd.append('contagem_id', contagemId);
+
+            const btn = document.querySelector(`tr[data-contagem-id="${contagemId}"] .btn-acao`);
+            if (btn) btnLoading(btn, true);
+
+            fetch('/api/ajax?acao=finalizar_contagem', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(d => {
+                    if (btn) btnLoading(btn, false);
+                    if (d.success) {
+                        showToast(d.message, 'sucesso');
+                        const tr = document.querySelector(`tr[data-contagem-id="${contagemId}"]`);
+                        if (tr) {
+                            tr.className = 'linha-encerrado';
+                            const tdStatus = tr.querySelector('td:nth-child(7)');
+                            if (tdStatus) tdStatus.innerHTML = '<span class="status-badge status-encerrado"><i class="fas fa-lock"></i> Encerrado</span>';
+                            const tdAcoes = tr.querySelector('td:nth-child(10)');
+                            if (tdAcoes) tdAcoes.innerHTML = '<span style="color:var(--gray);font-size:12px;"><i class="fas fa-lock"></i></span>';
+                            tr.style.transition = 'all 0.4s ease';
+                            tr.style.backgroundColor = '#fef2f2';
+                            setTimeout(() => { tr.style.backgroundColor = ''; }, 800);
+                        }
+                    } else {
+                        showToast(d.message || 'Erro ao encerrar.', 'erro');
+                    }
+                })
+                .catch(() => {
+                    if (btn) btnLoading(btn, false);
+                    showToast('Erro de comunicação com o servidor.', 'erro');
+                });
+        }
+    );
+}
+
+window.abrirAcaoModal     = abrirAcaoModal;
+window.fecharAcaoModal    = fecharAcaoModal;
+window.executarLiberar    = executarLiberar;
+window.executarEncerrar   = executarEncerrar;
+window.atualizarLinhaTabela = atualizarLinhaTabela;
+window.verificarStatusPartnumber = verificarStatusPartnumber;
+window.iniciarScannerQR   = iniciarScannerQR;
+window.fecharScannerQR    = fecharScannerQR;

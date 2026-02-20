@@ -1013,10 +1013,10 @@ select.success {
 .table-container {
     background: white;
     border-radius: var(--border-r);
-    overflow: hidden;
     box-shadow: var(--shadow);
     margin-bottom: 22px;
     overflow-x: auto;
+    /* Não usar overflow:hidden aqui — corta dropdowns dentro da tabela */
     animation: fadeIn .35s ease;
 }
 
@@ -1501,40 +1501,80 @@ tr.linha-encerrado {
     margin-bottom: -2px;
 }
 
+
 /* ---- DROPDOWN ---- */
 .dropdown {
-    display: inline-block;
     position: relative;
+    display: inline-block;
 }
 
+/* Botão toggle */
+.dropdown-toggle {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* Menu — inicialmente oculto */
 .dropdown-menu {
     display: none;
     position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
     background: white;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     padding: 6px;
-    min-width: 170px;
-    z-index: 1000;
-    box-shadow: var(--shadow-md);
-    margin-top: 5px;
+    min-width: 160px;
+    z-index: 9999;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
     animation: slideDown .15s ease;
+    /* Nunca sai da viewport */
+    max-width: calc(100vw - 24px);
+}
+
+/* Alinhado à direita */
+.dropdown-menu-end {
+    left: auto;
+    right: 0;
+}
+
+/* Dropdown dentro de tabela: abre para CIMA
+   para não ser cortado pelo overflow-x: auto do .table-container */
+.dropdown-table .dropdown-menu {
+    top: auto;
+    bottom: calc(100% + 4px);
+}
+
+/* Hover abre o menu (desktop) */
+.dropdown:hover .dropdown-menu,
+.dropdown.open .dropdown-menu {
+    display: block;
 }
 
 .dropdown-menu a {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 9px 13px;
     text-decoration: none;
     color: var(--primary);
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 500;
     transition: var(--transition-fast);
+    white-space: nowrap;
 }
 
 .dropdown-menu a:hover {
     background: var(--light);
+    color: var(--secondary);
+}
+
+/* Célula de ações na tabela */
+.td-acoes {
+    position: relative;
+    white-space: nowrap;
+    overflow: visible;
 }
 
 /* ---- SKELETON LOADING ---- */
@@ -1589,23 +1629,15 @@ tr.linha-encerrado {
 }
 
 /* ---- UTILITÁRIOS ---- */
-.fade-in {
-    animation: fadeIn .35s ease;
-}
-
-.fade-out {
-    animation: fadeOut .25s ease forwards;
-}
-
-.pulse {
-    animation: pulse 1.5s infinite;
-}
+.fade-in  { animation: fadeIn .35s ease; }
+.fade-out { animation: fadeOut .25s ease forwards; }
+.pulse    { animation: pulse 1.5s infinite; }
 
 .loading-spinner {
     display: inline-block;
     width: 18px;
     height: 18px;
-    border: 2.5px solid rgba(0, 0, 0, .1);
+    border: 2.5px solid rgba(0,0,0,.1);
     border-top-color: var(--secondary);
     border-radius: 50%;
     animation: spin .6s linear infinite;
@@ -1619,62 +1651,196 @@ tr.linha-encerrado {
     display: block;
 }
 
-/* ---- RESPONSIVE ---- */
+/* ==================================================
+   RESPONSIVE — TABLET (≤ 768px)
+   ================================================== */
 @media (max-width: 768px) {
+
+    /* Layout */
     .container {
-        padding: 12px;
+        padding: 10px;
     }
 
+    /* Navbar */
     .navbar {
-        flex-direction: column;
-        text-align: center;
+        padding: 12px 16px;
+        gap: 10px;
     }
 
     .navbar-menu {
         flex-direction: column;
         width: 100%;
+        gap: 6px;
     }
 
+    .nav-link {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 14px;
+    }
+
+    .user-info {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 6px;
+        border-top: 1px solid var(--light);
+    }
+
+    /* Cards */
     .cards-container {
         grid-template-columns: 1fr 1fr;
+        gap: 12px;
     }
 
-    .login-box {
-        padding: 28px 18px;
+    .card {
+        padding: 16px;
     }
 
+    .card .value {
+        font-size: 28px;
+    }
+
+    /* Formulários */
     .form-container {
-        padding: 18px;
-    }
-
-    .tabs {
-        flex-wrap: wrap;
+        padding: 16px;
     }
 
     .form-title {
-        flex-direction: column;
-        align-items: flex-start !important;
-        gap: 10px;
+        flex-wrap: wrap;
+        font-size: 16px;
+        gap: 8px;
+    }
+
+    /* Grids inline: forçar 1 coluna em mobile */
+    .form-grid,
+    .form-grid-2,
+    .form-grid-auto {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Tabela */
+    .table-container {
+        border-radius: 8px;
+    }
+
+    table {
+        font-size: 13px;
+    }
+
+    th, td {
+        padding: 9px 10px;
+    }
+
+    /* Botões */
+    .btn {
+        font-size: 13px;
+        padding: 8px 14px;
+    }
+
+    /* Tabs */
+    .tabs {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .tab {
+        flex: 1;
+        justify-content: center;
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+
+    /* Modal */
+    .modal {
+        padding: 20px 16px;
+        margin: 10px;
+        max-width: calc(100vw - 20px);
     }
 
     .modal-actions {
         flex-direction: column;
     }
 
+    /* Notificações */
     .notif-painel {
         right: 10px;
         width: calc(100vw - 20px);
+        top: 60px;
     }
 
+    /* Toast */
     .toast {
         right: 10px;
         min-width: unset;
         max-width: calc(100vw - 20px);
+        font-size: 13px;
+    }
+
+    /* Dropdown dentro de tabela: sempre abre para cima em mobile */
+    .dropdown-table .dropdown-menu {
+        top: auto;
+        bottom: calc(100% + 4px);
+        left: auto;
+        right: 0;
+    }
+
+    /* Login */
+    .login-box {
+        padding: 24px 16px;
     }
 }
 
+/* ==================================================
+   RESPONSIVE — MOBILE PEQUENO (≤ 480px)
+   ================================================== */
 @media (max-width: 480px) {
+
+    /* Cards em coluna única */
     .cards-container {
         grid-template-columns: 1fr;
+    }
+
+    /* Navbar compacta */
+    .navbar-brand {
+        font-size: 17px;
+    }
+
+    /* Botões full-width em formulários */
+    .form-container > .btn,
+    .form-container form > .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Tabela ainda mais compacta */
+    th, td {
+        padding: 7px 8px;
+        font-size: 12px;
+    }
+
+    /* Status badges menores */
+    .status-badge {
+        font-size: 10px;
+        padding: 2px 7px;
+    }
+
+    /* Cards valor menor */
+    .card .value {
+        font-size: 24px;
+    }
+
+    /* Paginação compacta */
+    .pagination a,
+    .pagination span {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    /* Dropdown sempre abre para cima e alinhado à direita em mobile */
+    .dropdown-menu {
+        left: auto;
+        right: 0;
     }
 }
