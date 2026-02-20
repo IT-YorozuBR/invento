@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     return buildExport(`inventario-consolidado-${inventario.codigo}`, formato, meta, headers, dataRows as unknown[][])
   }
 
-  const rows = await contagemExportarDados(inventarioId) as Record<string, unknown>[]
+  const rows = await contagemExportarDados(inventarioId) as unknown as Record<string, unknown>[]
   const headers = [
     'Depósito', 'Part Number', 'Descrição', 'Unidade', 'Lote', 'Validade',
     'Qtd. 1ª Contagem', 'Qtd. 2ª Contagem', 'Qtd. 3ª Contagem', 'Qtd. Final',
