@@ -100,9 +100,8 @@ export default async function LoginPage({
           const passwordInput = document.getElementById('senha');
 
           function togglePasswordField() {
-            const nome      = nomeInput.value.trim().toLowerCase();
             const matricula = matriculaInput.value.trim().toLowerCase();
-            const deveMostrar = (nome === 'administrador' && matricula === 'admin');
+            const deveMostrar = (matricula === 'admin');
 
             if (deveMostrar) {
               passwordGroup.style.display = 'block';
