@@ -3,6 +3,13 @@ import { Pool, PoolClient } from 'pg'
 // Pool global de conexões (singleton)
 let pool: Pool | null = null
 
+// Bancos gerenciados (Neon, RDS etc.) exigem SSL; um Postgres em container
+// próprio (ex.: docker-compose na mesma rede) normalmente não tem TLS habilitado.
+// Controlado por DATABASE_SSL=true|false — default: desligado (self-hosted).
+export function resolveSslConfig(): false | { rejectUnauthorized: boolean } {
+  return process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
+}
+
 export function getPool(): Pool {
   if (!pool) {
     const connectionString = process.env.DATABASE_URL
@@ -21,7 +28,7 @@ export function getPool(): Pool {
       connectionTimeoutMillis: 5_000,
       // Revalida a conexão antes de usá-la (evita conexões mortas)
       allowExitOnIdle: false,
-      ssl: { rejectUnauthorized: false },
+      ssl: resolveSslConfig(),
     })
 
     pool.on('error', (err) => {
@@ -98,6 +105,22 @@ export async function execute(
       insertId: result.rows[0]?.id,
     }
   })
+}
+
+// Executa fn dentro de uma transação (BEGIN/COMMIT/ROLLBACK), liberando a conexão ao final
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await getPool().connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
 }
 
 // Helper para desconectar (usar ao finalizar a aplicação)

@@ -1,0 +1,53 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invento-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Sobrescreve o DATABASE_URL do .env para apontar para o container do banco
+      # nesta mesma stack. Ajuste POSTGRES_USER/PASSWORD/DB via .env.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-invento}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-invento}
+      DATABASE_SSL: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - npm_network
+    # Sem "ports": a exposição pública é feita pelo Nginx Proxy Manager
+    # via npm_network, apontando para invento-app:3000.
+    expose:
+      - "3000"
+
+  db:
+    image: postgres:16-alpine
+    container_name: invento-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-invento}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-invento}
+    volumes:
+      - invento_db_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-invento} -d ${POSTGRES_DB:-invento}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  invento_db_data:
+
+networks:
+  default: {}
+  # Rede do Nginx Proxy Manager (definida em /opt/nginx-proxy-manager na VM).
+  # external: true = não recriar, só se conectar à que já existe.
+  npm_network:
+    external: true
+    name: nginx-proxy-manager_default

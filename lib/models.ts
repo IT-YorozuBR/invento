@@ -1,4 +1,5 @@
-import { query, queryOne, execute } from './db'
+import { query, queryOne, execute, withTransaction } from './db'
+import type { PoolClient } from 'pg'
 
 // ============================================================
 // TYPES
@@ -453,37 +454,48 @@ export async function contagemRegistrarPrimaria(
 ): Promise<{ success: boolean; message: string; fase?: number; status?: string; quantidade_final?: number | null; convergente?: boolean }> {
   const lote = extra.lote || null
 
-  let sql = 'SELECT * FROM contagens WHERE inventario_id = $1 AND deposito = $2 AND partnumber = $3'
-  const params: unknown[] = [inventarioId, deposito, partnumber]
+  return withTransaction(async (client) => {
+    // Lock por chave lógica: serializa concorrência para o mesmo item/depósito/lote,
+    // já que a UNIQUE constraint não protege contra duplicidade quando lote é NULL.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      `contagem|${inventarioId}|${deposito}|${partnumber}|${lote ?? ''}`,
+    ])
 
-  if (lote !== null) {
-    sql += ' AND lote = $4'
-    params.push(lote)
-  } else {
-    sql += ' AND (lote IS NULL OR lote = \'\')'
-  }
+    let sql = 'SELECT * FROM contagens WHERE inventario_id = $1 AND deposito = $2 AND partnumber = $3'
+    const params: unknown[] = [inventarioId, deposito, partnumber]
 
-  const existing = await queryOne<Contagem>(sql, params)
+    if (lote !== null) {
+      sql += ' AND lote = $4'
+      params.push(lote)
+    } else {
+      sql += ' AND (lote IS NULL OR lote = \'\')'
+    }
+    sql += ' FOR UPDATE'
 
-  if (existing) {
-    const podeNova = !!existing.pode_nova_contagem
-    const finalizado = !!existing.finalizado
+    const existingResult = await client.query(sql, params)
+    const existing = existingResult.rows[0] as Contagem | undefined
 
-    if (finalizado) {
-      return { success: false, message: 'Esta contagem já foi finalizada.' }
+    if (existing) {
+      const podeNova = !!existing.pode_nova_contagem
+      const finalizado = !!existing.finalizado
+
+      if (finalizado) {
+        return { success: false, message: 'Esta contagem já foi finalizada.' }
+      }
+
+      if (podeNova) {
+        return avancarParaProximaFase(client, existing, quantidade, usuarioId)
+      }
+
+      return somarNaFaseAtual(client, existing, quantidade)
     }
 
-    if (podeNova) {
-      return avancarParaProximaFase(existing, quantidade, usuarioId)
-    }
-
-    return somarNaFaseAtual(existing, quantidade)
-  }
-
-  return criarPrimeiraContagem(inventarioId, usuarioId, deposito, partnumber, quantidade, extra)
+    return criarPrimeiraContagem(client, inventarioId, usuarioId, deposito, partnumber, quantidade, extra)
+  })
 }
 
 async function somarNaFaseAtual(
+  client: PoolClient,
   row: Contagem,
   quantidade: number
 ): Promise<{ success: boolean; message: string; fase?: number }> {
@@ -492,7 +504,7 @@ async function somarNaFaseAtual(
 
   if (numContagens === 1) {
     const nova = Number(row.quantidade_primaria) + quantidade
-    await execute(
+    await client.query(
       "UPDATE contagens SET quantidade_primaria = $1, data_contagem_primaria = NOW(), status = 'primaria' WHERE id = $2",
       [nova, contagemId]
     )
@@ -503,7 +515,7 @@ async function somarNaFaseAtual(
     }
   } else if (numContagens === 2) {
     const nova = Number(row.quantidade_secundaria || 0) + quantidade
-    await execute(
+    await client.query(
       "UPDATE contagens SET quantidade_secundaria = $1, data_contagem_secundaria = NOW(), status = 'secundaria' WHERE id = $2",
       [nova, contagemId]
     )
@@ -520,6 +532,7 @@ async function somarNaFaseAtual(
 }
 
 async function avancarParaProximaFase(
+  client: PoolClient,
   row: Contagem,
   quantidade: number,
   usuarioId: number
@@ -527,20 +540,21 @@ async function avancarParaProximaFase(
   const numContagens = row.numero_contagens_realizadas
 
   if (numContagens === 1) {
-    return registrarSegundaFase(row.id, quantidade, usuarioId)
+    return registrarSegundaFase(client, row.id, quantidade, usuarioId)
   } else if (numContagens === 2) {
-    return registrarTerceiraFase(row, quantidade, usuarioId)
+    return registrarTerceiraFase(client, row, quantidade, usuarioId)
   }
 
   return { success: false, message: 'Número máximo de contagens atingido' }
 }
 
 async function registrarSegundaFase(
+  client: PoolClient,
   contagemId: number,
   quantidade: number,
   usuarioId: number
 ): Promise<{ success: boolean; message: string; fase?: number }> {
-  const result = await query<{ id: number }>(
+  const result = await client.query(
     `UPDATE contagens
      SET quantidade_secundaria = $1, usuario_secundario_id = $2,
          data_contagem_secundaria = NOW(), status = 'secundaria',
@@ -550,7 +564,7 @@ async function registrarSegundaFase(
     [quantidade, usuarioId, contagemId]
   )
 
-  if (result.length > 0) {
+  if (result.rows.length > 0) {
     return {
       success: true,
       fase: 2,
@@ -562,6 +576,7 @@ async function registrarSegundaFase(
 }
 
 async function registrarTerceiraFase(
+  client: PoolClient,
   row: Contagem,
   quantidade: number,
   usuarioId: number
@@ -589,10 +604,10 @@ async function registrarTerceiraFase(
     mensagem = `⚠️ Contagem encerrada. Por favor, aguarde o administrador.`
   }
 
-  let result: { id: number }[]
+  let result: { rows: { id: number }[] }
 
   if (quantidadeFinal !== null) {
-    result = await query<{ id: number }>(
+    result = await client.query(
       `UPDATE contagens
        SET quantidade_terceira = $1, usuario_terceiro_id = $2, quantidade_final = $3,
            data_contagem_terceira = NOW(), status = $4, numero_contagens_realizadas = 3,
@@ -602,7 +617,7 @@ async function registrarTerceiraFase(
       [terceira, usuarioId, quantidadeFinal, status, contagemId]
     )
   } else {
-    result = await query<{ id: number }>(
+    result = await client.query(
       `UPDATE contagens
        SET quantidade_terceira = $1, usuario_terceiro_id = $2,
            data_contagem_terceira = NOW(), status = $3, numero_contagens_realizadas = 3,
@@ -613,7 +628,7 @@ async function registrarTerceiraFase(
     )
   }
 
-  if (result.length > 0) {
+  if (result.rows.length > 0) {
     return {
       success: true,
       fase: 3,
@@ -628,6 +643,7 @@ async function registrarTerceiraFase(
 }
 
 async function criarPrimeiraContagem(
+  client: PoolClient,
   inventarioId: number,
   usuarioId: number,
   deposito: string,
@@ -640,7 +656,7 @@ async function criarPrimeiraContagem(
   const lote = extra.lote || null
   const validade = extra.validade || null
 
-  const result = await query<{ id: number }>(
+  const result = await client.query(
     `INSERT INTO contagens
       (inventario_id, usuario_id, deposito, partnumber, quantidade_primaria,
        descricao_item, unidade_medida, lote, validade, status,
@@ -650,7 +666,7 @@ async function criarPrimeiraContagem(
     [inventarioId, usuarioId, deposito, partnumber, quantidade, descricao, unidade, lote, validade]
   )
 
-  if (result.length > 0) {
+  if (result.rows.length > 0) {
     return {
       success: true,
       fase: 1,

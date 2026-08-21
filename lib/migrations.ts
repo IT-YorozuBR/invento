@@ -1,4 +1,5 @@
 import { Pool } from 'pg'
+import { resolveSslConfig } from './db'
 
 /**
  * Executa as migrations do banco de dados no PostgreSQL.
@@ -21,7 +22,7 @@ export async function runMigrations(): Promise<void> {
     user: url.username,
     password: url.password,
     database: 'postgres', // Conecta ao banco 'postgres' padrão
-    ssl: { rejectUnauthorized: false }, // Ajuste para conexões SSL, se necessário
+    ssl: resolveSslConfig(),
   })
 
   const conn = await adminPool.connect()

@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
   if (!deposito || !partnumber) {
     return NextResponse.json({ error: 'Depósito e Part Number são obrigatórios.' }, { status: 400 })
   }
-  if (quantidade <= 0) {
-    return NextResponse.json({ error: 'Quantidade deve ser maior que zero.' }, { status: 400 })
+  if (!Number.isFinite(quantidade) || quantidade <= 0) {
+    return NextResponse.json({ error: 'Quantidade deve ser um número maior que zero.' }, { status: 400 })
   }
 
   // Suporte a "OUTRO" (novo depósito)
