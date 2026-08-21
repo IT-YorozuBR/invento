@@ -10,16 +10,49 @@ export function resolveSslConfig(): false | { rejectUnauthorized: boolean } {
   return process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
 }
 
+export interface PgConnConfig {
+  host: string
+  port: number
+  user: string
+  password: string
+  database: string
+}
+
+// Resolve a configuração de conexão a partir de variáveis discretas
+// (PGHOST/PGUSER/PGPASSWORD/PGDATABASE/PGPORT), se presentes, ou por
+// parse de DATABASE_URL como alternativa. Variáveis discretas evitam
+// que caracteres especiais na senha (/, +, @, #...) quebrem o parser
+// de URL — problema real com senhas geradas aleatoriamente.
+export function resolvePgConfig(): PgConnConfig {
+  if (process.env.PGHOST) {
+    return {
+      host: process.env.PGHOST,
+      port: parseInt(process.env.PGPORT || '5432'),
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || '',
+      database: process.env.PGDATABASE || 'postgres',
+    }
+  }
+
+  const connectionString = process.env.DATABASE_URL
+  if (!connectionString) {
+    throw new Error('Defina DATABASE_URL ou PGHOST/PGUSER/PGPASSWORD/PGDATABASE.')
+  }
+
+  const url = new URL(connectionString)
+  return {
+    host: url.hostname,
+    port: parseInt(url.port) || 5432,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.slice(1),
+  }
+}
+
 export function getPool(): Pool {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL
-
-    if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is not set')
-    }
-
     pool = new Pool({
-      connectionString,
+      ...resolvePgConfig(),
       max: 10,
       // Tempo máximo que uma conexão idle fica no pool antes de ser fechada
       // Menor que o timeout padrão do servidor (evita "connection terminated")

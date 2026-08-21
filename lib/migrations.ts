@@ -1,26 +1,18 @@
 import { Pool } from 'pg'
-import { resolveSslConfig } from './db'
+import { resolveSslConfig, resolvePgConfig } from './db'
 
 /**
  * Executa as migrations do banco de dados no PostgreSQL.
  */
 export async function runMigrations(): Promise<void> {
-  const connectionUrl = process.env.DATABASE_URL
-
-  if (!connectionUrl) {
-    throw new Error('DATABASE_URL environment variable is not set')
-  }
-
-  // Parse da URL para extrair informações
-  const url = new URL(connectionUrl)
-  const dbName = url.pathname.slice(1) // Remove leading '/'
+  const config = resolvePgConfig()
 
   // Conecta sem selecionar banco para poder criar se não existir
   const adminPool = new Pool({
-    host: url.hostname,
-    port: parseInt(url.port) || 5432,
-    user: url.username,
-    password: url.password,
+    host: config.host,
+    port: config.port,
+    user: config.user,
+    password: config.password,
     database: 'postgres', // Conecta ao banco 'postgres' padrão
     ssl: resolveSslConfig(),
   })
@@ -30,13 +22,13 @@ export async function runMigrations(): Promise<void> {
   try {
     // Criar banco de dados se não existir
     await conn.query(`
-      SELECT 1 FROM pg_database 
+      SELECT 1 FROM pg_database
       WHERE datname = $1
-    `, [dbName])
+    `, [config.database])
       .then(async (res) => {
         if (res.rows.length === 0) {
-          await conn.query(`CREATE DATABASE "${dbName}" ENCODING 'UTF8'`)
-          console.log(`Database ${dbName} created`)
+          await conn.query(`CREATE DATABASE "${config.database}" ENCODING 'UTF8'`)
+          console.log(`Database ${config.database} created`)
         }
       })
       .catch((err) => {
@@ -51,7 +43,7 @@ export async function runMigrations(): Promise<void> {
   }
 
   // Agora conecta ao banco específico
-  const appPool = new Pool({ connectionString: connectionUrl })
+  const appPool = new Pool({ ...config, ssl: resolveSslConfig() })
   const appConn = await appPool.connect()
 
   try {
