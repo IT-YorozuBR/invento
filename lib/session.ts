@@ -10,11 +10,20 @@ export interface SessionData {
   lastActivity?:    number
 }
 
+// Cookie "secure" exige HTTPS para ser aceito pelo navegador. Em produção
+// atrás de um proxy sem TLS (ex.: domínio .local interno), isso faz o login
+// "funcionar" no servidor mas o cookie nunca ser salvo no navegador.
+// SESSION_COOKIE_SECURE permite desligar explicitamente nesses casos.
+const cookieSecure =
+  process.env.SESSION_COOKIE_SECURE !== undefined
+    ? process.env.SESSION_COOKIE_SECURE === 'true'
+    : process.env.NODE_ENV === 'production'
+
 export const sessionOptions: SessionOptions = {
   password:    process.env.SESSION_SECRET || 'default-dev-secret-change-in-production',
   cookieName:  'invento_session',
   cookieOptions: {
-    secure:   process.env.NODE_ENV === 'production',
+    secure:   cookieSecure,
     httpOnly: true,
     sameSite: 'strict',
   },
