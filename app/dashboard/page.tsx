@@ -214,8 +214,7 @@ export default async function DashboardPage({
                 const btn = document.getElementById('btnCriarInventario');
                 if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-text"><i class="fas fa-spinner fa-spin"></i> Criando...</span>'; }
                 const fd = new FormData(formCriar);
-                fd.append('acao_inventario', 'criar');
-                const resp = await fetch('/api/dashboard', { method: 'POST', body: fd });
+                const resp = await fetch('/api/inventarios', { method: 'POST', body: fd });
                 const data = await resp.json();
                 if (data.success) {
                   window.location.href = '/dashboard?msg=' + encodeURIComponent(data.message) + '&msgType=sucesso';
@@ -233,9 +232,8 @@ export default async function DashboardPage({
                 if (!confirm('Fechar este inventário?\\n\\nApós fechar, novas contagens não poderão ser registradas.')) return;
                 const btn = document.getElementById('btnFecharInventario');
                 if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-text"><i class="fas fa-spinner fa-spin"></i> Fechando...</span>'; }
-                const fd = new FormData(formFechar);
-                fd.append('acao_inventario', 'fechar');
-                const resp = await fetch('/api/dashboard', { method: 'POST', body: fd });
+                const invId = new FormData(formFechar).get('inventario_id');
+                const resp = await fetch('/api/inventarios/' + invId + '/fechamento', { method: 'POST' });
                 const data = await resp.json();
                 if (data.success) {
                   window.location.href = '/dashboard?msg=' + encodeURIComponent(data.message) + '&msgType=sucesso';

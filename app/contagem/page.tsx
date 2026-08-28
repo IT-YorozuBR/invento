@@ -462,9 +462,8 @@ export default async function ContagemPage({
             var btn = document.getElementById('btnRegistrar');
             if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...'; }
             var fd = new FormData(e.target);
-            fd.append('acao_contagem', 'registrar');
             try {
-              var resp = await fetch('/api/contagem', { method: 'POST', body: fd });
+              var resp = await fetch('/api/contagens', { method: 'POST', body: fd });
               var data = await resp.json();
               var msgType = data.success ? 'sucesso' : 'erro';
               window.location.href = '/contagem?msg=' + encodeURIComponent(data.message || data.error || '') + '&msgType=' + msgType;

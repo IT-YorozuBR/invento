@@ -268,10 +268,10 @@ export default async function CadastrosPage({
         </div>
 
         <script dangerouslySetInnerHTML={{ __html: `
-          async function postCadastro(fd, redirectUrl) {
-            const resp = await fetch('/api/cadastros', { method: 'POST', body: fd });
-            const data = await resp.json();
-            const ok   = data.success !== false && !data.error;
+          async function postCadastro(url, options, redirectUrl) {
+            const resp = await fetch(url, options);
+            const data = await resp.json().catch(() => ({}));
+            const ok   = resp.ok && data.success !== false && !data.error;
             const msg  = data.message || data.error || (ok ? 'Operação realizada.' : 'Erro.');
             window.location.href = redirectUrl + '&msg=' + encodeURIComponent(msg) + '&msgType=' + (ok ? 'sucesso' : 'erro');
           }
@@ -287,8 +287,7 @@ export default async function CadastrosPage({
                 const btn = document.getElementById('btnSalvarDeposito');
                 if (btn) btn.disabled = true;
                 const fd = new FormData(formDep);
-                fd.append('acao', 'cadastrar_deposito');
-                await postCadastro(fd, '/cadastros?tipo=depositos');
+                await postCadastro('/api/depositos', { method: 'POST', body: fd }, '/cadastros?tipo=depositos');
               });
             }
 
@@ -298,10 +297,7 @@ export default async function CadastrosPage({
                 const nome = this.dataset.nome;
                 if (!confirm('Excluir o depósito \\'' + nome + '\\'?')) return;
                 this.disabled = true;
-                const fd = new FormData();
-                fd.append('acao', 'excluir_deposito');
-                fd.append('deposito', this.dataset.deposito);
-                await postCadastro(fd, '/cadastros?tipo=depositos');
+                await postCadastro('/api/depositos/' + encodeURIComponent(this.dataset.deposito), { method: 'DELETE' }, '/cadastros?tipo=depositos');
               });
             });
 
@@ -313,8 +309,7 @@ export default async function CadastrosPage({
                 const btn = document.getElementById('btnSalvarPN');
                 if (btn) btn.disabled = true;
                 const fd = new FormData(formPN);
-                fd.append('acao', 'cadastrar_partnumber');
-                await postCadastro(fd, '/cadastros?tipo=partnumbers');
+                await postCadastro('/api/partnumbers', { method: 'POST', body: fd }, '/cadastros?tipo=partnumbers');
               });
             }
 
@@ -324,10 +319,7 @@ export default async function CadastrosPage({
                 const nome = this.dataset.nome;
                 if (!confirm('Excluir o part number \\'' + nome + '\\'?')) return;
                 this.disabled = true;
-                const fd = new FormData();
-                fd.append('acao', 'excluir_partnumber');
-                fd.append('partnumber', this.dataset.pn);
-                await postCadastro(fd, '/cadastros?tipo=partnumbers');
+                await postCadastro('/api/partnumbers/' + encodeURIComponent(this.dataset.pn), { method: 'DELETE' }, '/cadastros?tipo=partnumbers');
               });
             });
 
@@ -339,8 +331,7 @@ export default async function CadastrosPage({
                 const btn = document.getElementById('btnImportarCSV');
                 if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-text"><i class="fas fa-spinner fa-spin"></i> Importando...</span>'; }
                 const fd = new FormData(formCSV);
-                fd.append('acao', 'importar_partnumbers');
-                await postCadastro(fd, '/cadastros?tipo=partnumbers');
+                await postCadastro('/api/partnumbers/importacoes', { method: 'POST', body: fd }, '/cadastros?tipo=partnumbers');
               });
             }
           });

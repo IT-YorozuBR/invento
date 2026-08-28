@@ -515,7 +515,7 @@ function iniciarPollingNotificacoes() {
     function poll() {
         const desde = sessionStorage.getItem(NOTIF_KEY) || (Math.floor(Date.now() / 1000) - 60);
 
-        fetch(`/api/ajax?acao=notificacoes&desde=${desde}`, {
+        fetch(`/api/notificacoes?desde=${desde}`, {
             method: 'GET',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -762,7 +762,7 @@ function setupAutocompleteApi(inputId, dropdownId, tipo, novoDivId = null, onSel
 
         debounceTimer = setTimeout(async () => {
             try {
-                const resp = await fetch(`/api/ajax?tipo=${tipo}&termo=${encodeURIComponent(val)}`);
+                const resp = await fetch(`/api/${tipo}s?q=${encodeURIComponent(val)}`);
                 const data = await resp.json();
 
                 dropdown.innerHTML = '';
@@ -835,10 +835,8 @@ function verificarStatusPartnumber() {
     clearTimeout(_verificarTimer);
     _verificarTimer = setTimeout(async () => {
         try {
-            const fd = new FormData();
-            fd.append('partnumber', pn);
-            fd.append('deposito', dep);
-            const resp = await fetch('/api/ajax?acao=verificar_status_contagem', { method: 'POST', body: fd });
+            const qs = new URLSearchParams({ partnumber: pn, deposito: dep });
+            const resp = await fetch('/api/contagens?' + qs.toString());
             const data = await resp.json();
 
             if (!data.existe) return;
@@ -1041,15 +1039,14 @@ function executarLiberar(contagemId, fase) {
         `Deseja liberar a <strong>${nomeFase} contagem</strong> para este item?<br>
          <small style="color:var(--gray)">O operador poderá registrar a próxima contagem.</small>`,
         () => {
-            const acao = fase === 2 ? 'liberar_segunda' : 'liberar_terceira';
-            const fd   = new FormData();
-            if (window.csrfToken) fd.append('csrf_token', window.csrfToken);
-            fd.append('contagem_id', contagemId);
-
             const btn = document.querySelector(`tr[data-contagem-id="${contagemId}"] .btn-acao`);
             if (btn) btnLoading(btn, true);
 
-            fetch(`/api/ajax?acao=${acao}`, { method: 'POST', body: fd })
+            fetch(`/api/contagens/${contagemId}/liberacoes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fase })
+            })
                 .then(r => r.json())
                 .then(d => {
                     if (btn) btnLoading(btn, false);
@@ -1077,14 +1074,10 @@ function executarEncerrar(contagemId, partnumber) {
         `Encerrar a contagem de <strong>${partnumber}</strong>?<br>
          <small style="color:var(--gray)">Esta ação não pode ser desfeita. Nenhuma nova contagem será aceita para este item.</small>`,
         () => {
-            const fd = new FormData();
-            if (window.csrfToken) fd.append('csrf_token', window.csrfToken);
-            fd.append('contagem_id', contagemId);
-
             const btn = document.querySelector(`tr[data-contagem-id="${contagemId}"] .btn-acao`);
             if (btn) btnLoading(btn, true);
 
-            fetch('/api/ajax?acao=finalizar_contagem', { method: 'POST', body: fd })
+            fetch(`/api/contagens/${contagemId}/fechamento`, { method: 'POST' })
                 .then(r => r.json())
                 .then(d => {
                     if (btn) btnLoading(btn, false);
