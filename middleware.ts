@@ -33,9 +33,14 @@ export async function middleware(req: NextRequest) {
   // Verifica timeout de sessão
   const timeout = parseInt(process.env.SESSION_TIMEOUT || '3600')
   if (session.lastActivity && (Date.now() / 1000 - session.lastActivity) > timeout) {
-    session.destroy()
-    const loginUrl = new URL('/login?timeout=1', req.url)
-    return NextResponse.redirect(loginUrl)
+    // O cookie precisa ser limpo na resposta de redirect (e não em `res`),
+    // senão o cookie expirado continua no navegador e /login ↔ /dashboard
+    // entram em loop de redirecionamento.
+    const redirectRes = NextResponse.redirect(new URL('/login?timeout=1', req.url))
+    // @ts-ignore
+    const expired = await getIronSession<SessionData>(req, redirectRes, sessionOptions)
+    expired.destroy()
+    return redirectRes
   }
 
   // Atualiza lastActivity

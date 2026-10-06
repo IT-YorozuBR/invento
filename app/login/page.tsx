@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getSession } from '@/lib/session'
+import { getSession, checkSessionTimeout } from '@/lib/session'
 
 export const metadata = { title: 'Login — Invento' }
 
@@ -9,7 +9,8 @@ export default async function LoginPage({
   searchParams: { timeout?: string; error?: string }
 }) {
   const session = await getSession()
-  if (session.usuarioId) {
+  // Sessão expirada não conta como logada (evita loop com o middleware)
+  if (session.usuarioId && checkSessionTimeout(session)) {
     redirect('/dashboard')
   }
 
