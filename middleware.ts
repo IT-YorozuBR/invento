@@ -5,6 +5,14 @@ import { sessionOptions, SessionData } from './lib/session'
 // Rotas que não precisam de autenticação
 const PUBLIC_ROUTES = ['/login', '/api/auth/login']
 
+// Atrás de proxy reverso (modo standalone), req.url reflete o host interno
+// do container. Monta a URL com o host/protocolo que o navegador usou.
+function publicUrl(req: NextRequest, path: string) {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || req.nextUrl.host
+  const proto = req.headers.get('x-forwarded-proto') || req.nextUrl.protocol.replace(':', '')
+  return new URL(path, `${proto}://${host}`)
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
@@ -26,7 +34,7 @@ export async function middleware(req: NextRequest) {
 
   if (!session.usuarioId) {
     // Redireciona para login
-    const loginUrl = new URL('/login', req.url)
+    const loginUrl = publicUrl(req, '/login')
     return NextResponse.redirect(loginUrl)
   }
 
@@ -36,7 +44,7 @@ export async function middleware(req: NextRequest) {
     // O cookie precisa ser limpo na resposta de redirect (e não em `res`),
     // senão o cookie expirado continua no navegador e /login ↔ /dashboard
     // entram em loop de redirecionamento.
-    const redirectRes = NextResponse.redirect(new URL('/login?timeout=1', req.url))
+    const redirectRes = NextResponse.redirect(publicUrl(req, '/login?timeout=1'))
     // @ts-ignore
     const expired = await getIronSession<SessionData>(req, redirectRes, sessionOptions)
     expired.destroy()
